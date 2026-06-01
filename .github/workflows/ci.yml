@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build · test · example type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm run build
+      - run: npm test
+      # The example links to the local SDK via `file:../..` (npm symlinks it),
+      # so type-check it against the freshly built dist.
+      - run: npm --prefix examples/web install
+      - run: npm --prefix examples/web run type-check

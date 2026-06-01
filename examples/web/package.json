@@ -1,0 +1,17 @@
+{
+  "name": "@addressiq/example-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AddressIQ IQCollect web example — linked to the local SDK.",
+  "type": "module",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "serve": "npx --yes http-server . -p 8080 -o"
+  },
+  "dependencies": {
+    "@addressiq/iqcollect-web": "file:../.."
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
