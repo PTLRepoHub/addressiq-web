@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AddressIQ IQCollect — CDN sample</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #0a0d12; color: #cdd6df; padding: 32px; }
+        #iqcollect-mount { background: #1c2330; border-radius: 12px; padding: 16px; min-height: 240px; }
+        h1 { color: #ffffff; margin-bottom: 8px; }
+        p { color: #9aa6b2; margin-top: 0; }
+        code { background: #1c2330; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>AddressIQ IQCollect — CDN sample</h1>
+    <p>Drop-in <code>&lt;script&gt;</code> integration. SRI hash refreshes on every release.</p>
+    <div id="iqcollect-mount"></div>
+
+    <!-- Pinned exact version — recommended for production. SRI hash from cdn.addressiq.com/v0.1.0/MANIFEST.json -->
+    <script
+        src="https://cdn.addressiq.com/v0.1.0/iqcollect.js"
+        integrity="sha384-PLACEHOLDER_REPLACED_AT_RELEASE_BY_CI"
+        crossorigin="anonymous">
+    </script>
+
+    <script>
+        const collector = new window.AddressIQ.IQCollect(
+            document.getElementById('iqcollect-mount'),
+            {
+                apiKey: 'aiq_test_demo_bank_seed01',
+                apiUrl: 'https://api.addressiq.com',
+                appUserId: 'cust_sample_001',
+                theme: 'dark',
+                onAddressSelected: (address) => console.log('[cdn sample] address', address),
+                onError: (err) => console.error('[cdn sample] error', err),
+            }
+        );
+        collector.open();
+    </script>
+</body>
+</html>
