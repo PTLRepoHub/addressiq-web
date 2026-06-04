@@ -23,6 +23,7 @@
     "test": "jest",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
+    "proto:gen": "buf generate",
     "size-check": "node scripts/check-size.mjs",
     "manifest": "node scripts/generate-manifest.mjs",
     "example": "npm run build && npm --prefix examples/web install && npm --prefix examples/web run serve"
