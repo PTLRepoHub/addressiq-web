@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AddressIQ IQCollect — local dev harness</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #f3f4f6; color: #111827; margin: 0; padding: 24px; }
+        .wrap { max-width: 520px; margin: 0 auto; }
+        .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+        .bar label { font-size: 13px; }
+        button.dev { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+        #iqcollect-mount { background: #fff; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); min-height: 480px; }
+        #log { margin-top: 16px; font-size: 12px; font-family: ui-monospace, monospace; background: #111827; color: #a7f3d0; border-radius: 8px; padding: 12px; white-space: pre-wrap; max-height: 200px; overflow: auto; }
+        h1 { font-size: 18px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>IQCollect — local dev harness</h1>
+    <div class="bar">
+        <label><input type="checkbox" id="fakeLoc" checked /> Fake LocationProvider (canned Abuja fix)</label>
+        <button class="dev" id="reopen">Reopen flow</button>
+    </div>
+    <p style="font-size:13px;color:#6b7280;margin-top:0">
+        Backend: <code id="api"></code> — talks <b>directly to your local AddressIQ API</b>
+        (geo-tagging on <code>:4000</code>), dev CORS allows this. Override with
+        <code>?api=</code>, <code>?key=</code>, <code>?gmaps=</code>. To use the sample
+        server / fake data instead, point <code>?api=http://localhost:3355</code>.
+    </p>
+    <div id="iqcollect-mount"></div>
+    <div id="log"></div>
+</div>
+
+<!-- Locally built bundle (npm run build) -->
+<script src="../../dist/iqcollect.js"></script>
+<script>
+    const params = new URLSearchParams(location.search);
+    // Default: hit the geo-tagging backend directly (dev CORS allows all origins).
+    const API_URL = params.get('api') || 'http://localhost:4000';
+    // Seeded test tenant key (Demo Bank sandbox). Override with ?key=.
+    const API_KEY = params.get('key') || 'aiq_test_demo_bank_seed01';
+    document.getElementById('api').textContent = API_URL;
+    const logEl = document.getElementById('log');
+    const log = (...a) => { logEl.textContent += a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+
+    // Fake LocationProvider so the flow runs without a real GPS prompt / native shell.
+    const fakeLocationProvider = {
+        getCurrentPosition: () => { log('[loc] fake fix → Abuja'); return Promise.resolve({ lat: 9.0765, lon: 7.3986, accuracy: 8 }); },
+        getPermissionStatus: () => Promise.resolve('granted'),
+    };
+
+    // The widget fetches the Google Maps key from the backend (GET /api/v1/widget/config)
+    // — no need to pass it. Use ?gmaps= only to override for local testing.
+    const mapsKeyOverride = params.get('gmaps') || undefined;
+
+    let collector;
+    function open() {
+        document.getElementById('iqcollect-mount').innerHTML = '';
+        logEl.textContent = '';
+        collector = new window.AddressIQ.IQCollect(
+            document.getElementById('iqcollect-mount'),
+            {
+                apiKey: API_KEY,
+                apiUrl: API_URL,
+                appUserId: 'cust_local_001',
+                googleMapsApiKey: mapsKeyOverride,
+                // No business config passed — the widget fetches the business
+                // name/logo/colour from the backend (tenant behind the API key).
+                locationProvider: document.getElementById('fakeLoc').checked ? fakeLocationProvider : undefined,
+                onAddressSelected: (a) => log('[event] addressSelected', a),
+                onError: (e) => log('[event] error', e),
+                onClose: () => log('[event] close'),
+            }
+        );
+        collector.open();
+    }
+    document.getElementById('reopen').onclick = open;
+    open();
+</script>
+</body>
+</html>

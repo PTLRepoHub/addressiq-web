@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IQCollect screenshot harness</title>
+<style>html,body{margin:0;background:#fff;height:100%}#mount{max-width:440px;margin:0 auto;min-height:100%}</style>
+</head>
+<body>
+<div id="mount"></div>
+<script src="/dist/iqcollect.js"></script>
+<script>
+  var params = new URLSearchParams(location.search);
+  var targetStep = parseInt(params.get('step') || '0', 10);   // 0 intro,1 collab,2 live,3 book,4 collect-address
+  var mode = params.get('mode') || 'book';                     // 'book' or 'new'
+
+  var c = new window.AddressIQ.IQCollect(document.getElementById('mount'), {
+    apiKey: params.get('key') || 'aiq_test_demo_bank_seed01',
+    apiUrl: params.get('api') || 'http://localhost:4000',
+    appUserId: params.get('appUserId') || 'cust_e2e_001',
+    // No business config — fetched from the backend (real org) at startup.
+    // Fake native location so the collect "use current location" works headless.
+    locationProvider: {
+      getCurrentPosition: function(){ return Promise.resolve({ lat: 9.0765, lon: 7.3986, accuracy: 8 }); },
+      getPermissionStatus: function(){ return Promise.resolve('granted'); }
+    }
+  });
+  c.open();
+
+  function byText(t){
+    return Array.prototype.slice.call(document.querySelectorAll('.iq-btn'))
+      .filter(function(b){ return b.textContent.trim().toLowerCase().indexOf(t) >= 0; })[0];
+  }
+  var clicks = 0;
+  var driver = setInterval(function(){
+    try {
+      // Step 4: advance to the book, then branch into a new address.
+      if (targetStep === 4) {
+        var nx = byText('continue') || byText('next');
+        if (nx) { nx.click(); return; }
+        var vn = byText('verify a new address');
+        if (vn) { vn.click(); clearInterval(driver); return; }
+        return;
+      }
+      // Step 5: advance to the book, then Verify the first saved address → success.
+      if (targetStep === 5) {
+        var nx2 = byText('continue') || byText('next');
+        if (nx2) { nx2.click(); return; }
+        var v = byText('verify');   // the per-address Verify button
+        if (v && v.textContent.trim().toLowerCase() === 'verify') { v.click(); clearInterval(driver); return; }
+        return;
+      }
+      // Steps 0-3: click Continue exactly targetStep times.
+      if (clicks >= targetStep) { clearInterval(driver); return; }
+      var next = byText('continue') || byText('next');
+      if (next) { next.click(); clicks++; }
+    } catch (e) {}
+  }, 300);
+</script>
+</body>
+</html>
