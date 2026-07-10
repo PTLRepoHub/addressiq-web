@@ -195,7 +195,7 @@ export class FlowController {
     body.appendChild(card);
 
     const links = el('div', 'iq-links');
-    links.innerHTML = 'Read our full <a href="https://addressiq.com/terms" target="_blank" rel="noopener">Terms</a> and <a href="https://addressiq.com/privacy" target="_blank" rel="noopener">Privacy Policy</a>';
+    links.innerHTML = 'Read our full <a href="https://addressiqpro.com/terms" target="_blank" rel="noopener">Terms</a> and <a href="https://addressiqpro.com/privacy" target="_blank" rel="noopener">Privacy Policy</a>';
     body.appendChild(links);
     body.appendChild(this.cta('Continue', () => { this.stage = 'live'; this.render(); }));
   }

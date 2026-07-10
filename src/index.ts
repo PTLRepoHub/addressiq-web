@@ -7,7 +7,7 @@
  *
  * Two distributions ship from this one source:
  *   1. npm `@addressiq/iqcollect-web` — bundler-friendly ESM/CJS.
- *   2. CDN UMD bundle at `https://cdn.addressiq.com/v{n.n.n}/iqcollect.js`
+ *   2. CDN UMD bundle at `https://cdn.addressiqpro.com/v{n.n.n}/iqcollect.js`
  *      attaching `window.AddressIQ.IQCollect`. SRI hashes ship in docs.
  *
  * Partners who reach for `window.AddressIQ.verify` (a leftover from older

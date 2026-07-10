@@ -93,5 +93,5 @@ export const BROWSER_VERIFICATION_NOT_SUPPORTED_ERROR: IQCollectError = {
   code: 'BROWSER_VERIFICATION_NOT_SUPPORTED',
   message:
     'Browsers cannot perform background geofencing. Use the mobile SDK for digital verification.',
-  docsUrl: 'https://docs.addressiq.com/sdks/web#why-no-verification',
+  docsUrl: 'https://docs.addressiqpro.com/sdks/web#why-no-verification',
 };

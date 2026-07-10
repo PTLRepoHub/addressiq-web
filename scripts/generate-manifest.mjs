@@ -4,7 +4,7 @@
 //
 // Run via `pnpm --filter @addressiq/iqcollect-web run manifest` AFTER
 // `pnpm build`. CI publishes MANIFEST.json alongside the bundle to
-// cdn.addressiq.com/v{x.y.z}/MANIFEST.json.
+// cdn.addressiqpro.com/v{x.y.z}/MANIFEST.json.
 
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
@@ -41,7 +41,7 @@ const manifest = {
   package: pkg.name,
   version: pkg.version,
   generatedAt: new Date().toISOString(),
-  cdn: `https://cdn.addressiq.com/v${pkg.version}/`,
+  cdn: `https://cdn.addressiqpro.com/v${pkg.version}/`,
   artifacts: entries,
 };
 

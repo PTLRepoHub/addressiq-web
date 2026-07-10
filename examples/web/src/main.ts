@@ -1,7 +1,7 @@
 // AddressIQ IQCollect sample — npm/bundler entry point.
 //
 // The same code works under Vite/Webpack/Rollup. The CDN drop-in version
-// lives in index.html — it loads iqcollect.js from cdn.addressiq.com and
+// lives in index.html — it loads iqcollect.js from cdn.addressiqpro.com and
 // uses window.AddressIQ.IQCollect.
 
 import {

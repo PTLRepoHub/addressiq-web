@@ -2,7 +2,7 @@
 //
 //  1. dist/index.esm.js  — ESM for bundlers (Vite/Webpack/Rollup).
 //  2. dist/index.cjs.js  — CommonJS for legacy bundlers + Node SSR.
-//  3. dist/iqcollect.js  — UMD bundle published to cdn.addressiq.com/v{x.y.z}/iqcollect.js.
+//  3. dist/iqcollect.js  — UMD bundle published to cdn.addressiqpro.com/v{x.y.z}/iqcollect.js.
 //                           Auto-attaches `window.AddressIQ.IQCollect`.
 //
 // The UMD build is minified + tree-shaken. CI enforces a ≤65 KB gzipped
@@ -26,7 +26,7 @@ export default [
     plugins: [resolve(), typescript({ tsconfig: './tsconfig.json' })],
   },
 
-  // UMD for cdn.addressiq.com — minified.
+  // UMD for cdn.addressiqpro.com — minified.
   {
     input: 'src/index.ts',
     output: {
