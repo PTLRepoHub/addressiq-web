@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/PTLRepoHub/addressiq-web/compare/v0.2.0...v0.3.0) (2026-07-10)
+
+
+### Features
+
+* **proto:** regen against proto v0.1.0 ([#2](https://github.com/PTLRepoHub/addressiq-web/issues/2)) ([e709b11](https://github.com/PTLRepoHub/addressiq-web/commit/e709b11feae793edbf94d36088886335477026dd))
+
 ## [0.2.0](https://github.com/PTLRepoHub/addressiq-web/compare/v0.1.0...v0.2.0) (2026-07-10)
 
 
