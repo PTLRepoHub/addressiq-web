@@ -39,7 +39,9 @@ jobs:
             VERSION="$(node -p "require('./package.json').version")"
             DRY="${{ github.event.inputs.dry_run }}"
           fi
-          npm version "$VERSION" --no-git-tag-version --allow-same-version          if [ "$DRY" = "true" ]; then
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          if [ "$DRY" = "true" ]; then
             npm publish --access public --no-workspaces --dry-run
           else
-            npm publish --access public          fi
+            npm publish --access public
+          fi
