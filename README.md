@@ -101,21 +101,9 @@ page) lives in
 As always, the web SDK is collect-only — it returns a `locationCode`, and
 verification runs on the mobile SDK via `startVerification({ locationCode })`.
 
-## Build-time provisioning (Maps key + API URL)
-
-Integrators pass **neither** a Google Maps key nor an API URL. Both are baked
-into the published bundle at build time from the GitHub environment:
-
-- `ADDRESSIQ_API_URL` (repo **variable**) → the `production` API host.
-- `GOOGLE_MAPS_SDK_KEY` (repo **secret**) → the default Google Maps JS key used
-  by the map + Street View.
-
-Rollup injects these via `@rollup/plugin-replace` (see `rollup.config.mjs` and
-`src/buildConfig.ts`); local builds without the env fall back to
-`https://api.addressiqpro.com` and an empty Maps key (the address step then
-degrades to a manual text field). The backend can still override the Maps key at
-runtime via `GET /api/v1/widget/config` — that value wins over the baked-in key,
-so keys rotate without a rebuild.
+The SDK talks to the AddressIQ platform automatically — integrators pass no API
+URL and no Google Maps key (the map key is provisioned at runtime by the
+platform); select the target environment via `environment` (see above).
 
 ## Release
 
