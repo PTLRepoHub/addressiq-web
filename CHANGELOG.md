@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/PTLRepoHub/addressiq-web/compare/v0.5.2...v0.5.3) (2026-07-12)
+
+
+### Bug Fixes
+
+* **fanout:** vendor a key-free widget bundle into Flutter for pub.dev ([#18](https://github.com/PTLRepoHub/addressiq-web/issues/18)) ([c32ebac](https://github.com/PTLRepoHub/addressiq-web/commit/c32ebacfad2888b19d8ea6ff69920d066645b78c))
+
 ## [0.5.2](https://github.com/PTLRepoHub/addressiq-web/compare/v0.5.1...v0.5.2) (2026-07-12)
 
 
