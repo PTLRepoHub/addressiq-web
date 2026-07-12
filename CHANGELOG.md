@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/PTLRepoHub/addressiq-web/compare/v0.3.0...v0.4.0) (2026-07-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* removed IQCollectConfig.apiUrl and IQCollectConfig.googleMapsApiKey. Select a host via `environment` (production | sandbox | development); the production host and Maps key are provisioned at build time.
+
+### Features
+
+* provision API URL (+ web: Maps key) at build time from GH env ([#6](https://github.com/PTLRepoHub/addressiq-web/issues/6)) ([39f253e](https://github.com/PTLRepoHub/addressiq-web/commit/39f253e82df86df8d5a311028f661c8a75b6dd47))
+
 ## [0.3.0](https://github.com/PTLRepoHub/addressiq-web/compare/v0.2.0...v0.3.0) (2026-07-10)
 
 
