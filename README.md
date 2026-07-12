@@ -87,7 +87,8 @@ const session = await fetch('/api/session', {
 const collector = new AddressIQ.IQCollect(mountEl, {
   apiKey: session.sessionToken, // server-minted, short-lived
   appUserId: session.appUserId,
-  apiUrl: session.apiUrl,
+  // The SDK resolves the API URL from `environment` — never pass a URL.
+  // Defaults to 'production'; use 'sandbox' or 'development' as needed.
   onAddressSelected: (a) => console.log(a.locationCode),
 });
 collector.open();
@@ -99,6 +100,10 @@ page) lives in
 [addressiq-node-backend](https://github.com/PTLRepoHub/addressiq-node-backend).
 As always, the web SDK is collect-only — it returns a `locationCode`, and
 verification runs on the mobile SDK via `startVerification({ locationCode })`.
+
+The SDK talks to the AddressIQ platform automatically — integrators pass no API
+URL and no Google Maps key (the map key is provisioned at runtime by the
+platform); select the target environment via `environment` (see above).
 
 ## Release
 
