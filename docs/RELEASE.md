@@ -73,6 +73,67 @@ Tags separate as `vX.Y.Z` (no component in the tag), matching the
 
 ---
 
+## 2b. CDN publish (`cdn.yml`)
+
+`rollup.config.mjs:6` and `scripts/generate-manifest.mjs:8` have always pointed
+at `https://cdn.addressiqpro.com/v{x.y.z}/` — but nothing served that host
+(RELEASE-ENGINEERING.md §6a). **`cdn.yml`** does: on `release: published` it
+builds, size-checks, generates `MANIFEST.json`, and uploads to a **DigitalOcean
+Spaces** bucket fronted by that domain.
+
+**The layout is immutable and versioned. There is no `latest/` or `v0/` alias.**
+The reason is SRI: `MANIFEST.json` exists so partners can pin
+`<script integrity="sha384-…">`, and a floating URL cannot be pinned — pointing
+it at a new build would break every pinned consumer. New version ⇒ new prefix:
+
+```
+cdn.addressiqpro.com/v0.3.0/iqcollect.js       (+ .js.map)
+cdn.addressiqpro.com/v0.3.0/index.esm.js       (+ .js.map)
+cdn.addressiqpro.com/v0.3.0/index.cjs.js       (+ .js.map)
+cdn.addressiqpro.com/v0.3.0/MANIFEST.json
+```
+
+Objects ship `cache-control: public, max-age=31536000, immutable`, so there is
+no purge step to get wrong.
+
+Three guards, because a published SRI hash is pinned for a year:
+
+1. **Upload list comes from `MANIFEST.json`, not a `dist/` glob** — the bytes on
+   the CDN are exactly the bytes that were hashed.
+2. **Existing versions are never overwritten** — a re-run against an existing
+   `v{x.y.z}/` prefix fails rather than rewriting bytes someone has pinned.
+3. **Read-back verification** — every object is downloaded from the origin after
+   upload and re-hashed against `MANIFEST.json`; a mismatch fails the release.
+
+The build bakes in the same six per-environment URLs (`STAGING_ADDRESSIQ_API_URL`,
+`STAGING_ADDRESSIQ_INGEST_URL`, `STAGING_ADDRESSIQ_CDN_URL`, `PROD_ADDRESSIQ_API_URL`,
+`PROD_ADDRESSIQ_INGEST_URL`, `PROD_ADDRESSIQ_CDN_URL`) + `GOOGLE_MAPS_SDK_KEY` as
+`release.yml` and `widget-fanout.yml`, so the CDN, npm, and vendored bundles are
+byte-comparable. `workflow_dispatch` defaults to `dry_run: true` (build, hash,
+and check the CDN — upload nothing).
+
+**Config** (one-time, in repo Settings):
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `SPACES_ACCESS_KEY_ID` | DO **Spaces** access key (API → Spaces Keys — *not* a DO API token) |
+| Secret | `SPACES_SECRET_ACCESS_KEY` | the paired secret |
+| Var | `SPACES_BUCKET` | Space name, e.g. `addressiq-cdn` |
+| Var | `SPACES_REGION` | e.g. `nyc3` (endpoint is derived: `nyc3.digitaloceanspaces.com`) |
+| Var | `PROD_ADDRESSIQ_CDN_URL` | the production CDN host, e.g. `https://cdn.addressiqpro.com` (also baked into the bundle) |
+| Var | `CDN_BASE_URL` | optional override of the host *this workflow uploads to*; defaults to `PROD_ADDRESSIQ_CDN_URL`, then to `https://cdn.addressiqpro.com` |
+
+Also required in DigitalOcean, once: create the Space, **enable its CDN**, and
+attach `cdn.addressiqpro.com` as a custom subdomain (Spaces → Settings → CDN,
+with a Let's Encrypt cert), then point the `cdn` CNAME at the Spaces CDN
+endpoint. `scripts/generate-manifest.mjs` resolves the manifest's `cdn` field
+from the same `CDN_BASE_URL` → `PROD_ADDRESSIQ_CDN_URL` → default chain that
+`cdn.yml` uses for its upload host, and `cdn.yml` still asserts the two agree —
+if they ever disagree it fails fast rather than advertising a URL it isn't
+writing.
+
+---
+
 ## 3. Auth and secrets
 
 **npm publish (`release.yml`):** uses an npm automation token in the

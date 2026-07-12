@@ -17,6 +17,8 @@
 
 export type {
   IQCollectConfig,
+  IQCollectEnvironment,
+  IQCollectEnvironmentInput,
   AddressData,
   IQCollectError,
   BusinessBranding,
@@ -25,7 +27,14 @@ export type {
 export { BROWSER_VERIFICATION_NOT_SUPPORTED_ERROR } from './types';
 export type { LocationProvider, LocationFix } from './location-provider';
 
-import type { IQCollectConfig, AddressData, IQCollectError, SavedAddress } from './types';
+import type {
+  IQCollectConfig,
+  IQCollectEnvironment,
+  IQCollectEnvironmentInput,
+  AddressData,
+  IQCollectError,
+  SavedAddress,
+} from './types';
 import { BROWSER_VERIFICATION_NOT_SUPPORTED_ERROR } from './types';
 import { FlowController } from './flow';
 import { BUILD_CONFIG } from './buildConfig';
@@ -60,13 +69,59 @@ function writeRefCache(key: string, data: unknown): void {
   }
 }
 
-/** API URL per environment. Integrators pass `environment`, not a URL. */
-const ENVIRONMENT_URLS: Record<'sandbox' | 'production' | 'development', string> = {
-  sandbox: 'https://api-staging.addressiqpro.com',
-  // Baked in at build from the GH `ADDRESSIQ_API_URL` variable (see buildConfig).
-  production: BUILD_CONFIG.apiUrl,
-  development: 'http://localhost:3355',
+/** The three URLs the SDK resolves for a given environment. */
+export interface EnvironmentUrls {
+  /** Public API host — every request the SDK makes today goes here. */
+  api: string;
+  /**
+   * Transit-event ingestion host. The web SDK is collect-only and sends no
+   * transit events, so nothing here fetches from it; it is resolved and exposed
+   * so hosts (and the mobile SDKs, which do ingest) agree on one per-environment
+   * host across the fleet.
+   */
+  ingest: string;
+  /** CDN host the UMD bundle is published to for this environment. */
+  cdn: string;
+}
+
+/**
+ * URLs per environment. Integrators pass `environment`, not a URL.
+ *
+ * `staging` and `production` are baked in at build time from the
+ * `STAGING_*` / `PROD_*` GitHub variables (see buildConfig.ts). `development`
+ * is deliberately NOT baked — it points at a backend on the developer's own
+ * machine, so it stays a literal. Never ship a build configured for
+ * `development`.
+ */
+const ENVIRONMENT_URLS: Record<IQCollectEnvironment, EnvironmentUrls> = {
+  staging: {
+    api: BUILD_CONFIG.stagingApiUrl,
+    ingest: BUILD_CONFIG.stagingIngestUrl,
+    cdn: BUILD_CONFIG.stagingCdnUrl,
+  },
+  production: {
+    api: BUILD_CONFIG.prodApiUrl,
+    ingest: BUILD_CONFIG.prodIngestUrl,
+    cdn: BUILD_CONFIG.prodCdnUrl,
+  },
+  development: {
+    api: 'http://localhost:3355',
+    ingest: 'http://localhost:3355',
+    cdn: 'http://localhost:3355',
+  },
 };
+
+/**
+ * Resolve the api/ingest/cdn hosts for an environment.
+ *
+ * `sandbox` is the former name for `staging`, retained so existing integrators
+ * keep working; it resolves identically.
+ */
+export function resolveEnvironmentUrls(
+  environment: IQCollectEnvironmentInput = 'production',
+): EnvironmentUrls {
+  return ENVIRONMENT_URLS[environment === 'sandbox' ? 'staging' : environment];
+}
 
 /**
  * Mount an IQCollect collection flow into the given DOM element.
@@ -80,6 +135,13 @@ export class IQCollect {
   private readonly config: IQCollectConfig;
   /** API base URL resolved from `config.environment`. */
   private readonly apiUrl: string;
+  /**
+   * Ingest + CDN hosts resolved from `config.environment`, exposed so hosts can
+   * read the same values the bundle was baked with. Nothing in this SDK fetches
+   * from either: the web SDK sends no transit events, and the widget is the CDN
+   * bundle rather than a fetcher of it.
+   */
+  readonly urls: EnvironmentUrls;
   private readonly mount: HTMLElement;
   private readonly bridge: HostBridge | null;
   private readonly locationProvider: LocationProvider;
@@ -96,9 +158,10 @@ export class IQCollect {
     if (!config.apiKey) throw new Error('IQCollect: apiKey is required');
     if (!config.appUserId) throw new Error('IQCollect: appUserId is required');
 
-    // Resolve the API URL purely from `environment` (integrators pass an enum,
+    // Resolve the URLs purely from `environment` (integrators pass an enum,
     // never a URL). Defaults to production.
-    this.apiUrl = ENVIRONMENT_URLS[config.environment ?? 'production'];
+    this.urls = resolveEnvironmentUrls(config.environment);
+    this.apiUrl = this.urls.api;
     this.config = config;
     this.mount = mount;
     // In a native webview the shell owns the Always/Precise prompt + fix.

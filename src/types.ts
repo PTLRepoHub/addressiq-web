@@ -28,14 +28,30 @@ export interface SavedAddress {
   lon?: number;
 }
 
+/**
+ * Canonical environment names. `staging` is the pre-production environment —
+ * named `staging` across all AddressIQ SDKs and matching the `STAGING_*` build
+ * variables. `development` points at a backend on the developer's own machine.
+ */
+export type IQCollectEnvironment = 'staging' | 'production' | 'development';
+
+/**
+ * What an integrator may pass. `sandbox` is the former name for `staging`,
+ * retained so existing integrators keep working; it resolves identically.
+ *
+ * @deprecated `'sandbox'` — use `'staging'`.
+ */
+export type IQCollectEnvironmentInput = IQCollectEnvironment | 'sandbox';
+
 export interface IQCollectConfig {
   apiKey: string;
   /**
-   * Which API to target. The SDK resolves the URL internally — integrators
-   * never pass a URL. `development` points at a local backend
-   * (http://localhost:3355); production/sandbox auto-resolve to the hosted APIs.
+   * Which environment to target. The SDK resolves the URLs internally —
+   * integrators never pass a URL. `development` points at a local backend
+   * (http://localhost:3355); `production`/`staging` auto-resolve to the hosted
+   * APIs. `sandbox` is a deprecated alias for `staging`.
    */
-  environment?: 'sandbox' | 'production' | 'development';
+  environment?: IQCollectEnvironmentInput;
   appUserId: string;
   /** Per-business branding for the intro + collaboration + consent screens. */
   business?: BusinessBranding;

@@ -88,7 +88,8 @@ const collector = new AddressIQ.IQCollect(mountEl, {
   apiKey: session.sessionToken, // server-minted, short-lived
   appUserId: session.appUserId,
   // The SDK resolves the API URL from `environment` — never pass a URL.
-  // Defaults to 'production'; use 'sandbox' or 'development' as needed.
+  // Defaults to 'production'; use 'staging' or 'development' as needed.
+  // ('sandbox' is a deprecated alias for 'staging'.)
   onAddressSelected: (a) => console.log(a.locationCode),
 });
 collector.open();

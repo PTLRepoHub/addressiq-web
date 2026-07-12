@@ -79,7 +79,20 @@ const SUBDIVISIONS: Record<string, string[]> = {
 
 let mapsLoading: Promise<void> | null = null;
 
-/** Load the Google Maps JS API once (idempotent). */
+/**
+ * How long to wait for the Google Maps JS API before giving up and falling
+ * back to manual address entry.
+ *
+ * This bound is load-bearing. `CollectForm.start()` awaits this before its
+ * first `render()`, and a blocked/hanging request to `maps.googleapis.com`
+ * fires neither `onload` nor `onerror` — so without a timeout the promise
+ * never settles and the widget renders *nothing*, indefinitely. Users behind
+ * a firewall, captive portal, or ad-blocker would see a permanently blank
+ * widget instead of the manual-entry fallback.
+ */
+const MAPS_LOAD_TIMEOUT_MS = 6000;
+
+/** Load the Google Maps JS API once (idempotent). Rejects if it can't load in time. */
 function loadMaps(apiKey: string): Promise<void> {
   const w = window as any;
   if (w.google?.maps) return Promise.resolve();
@@ -88,8 +101,20 @@ function loadMaps(apiKey: string): Promise<void> {
     const s = document.createElement('script');
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
     s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Failed to load Google Maps'));
+    const timer = setTimeout(() => {
+      // Let a later attempt retry rather than caching this rejection forever.
+      mapsLoading = null;
+      reject(new Error('Google Maps load timed out'));
+    }, MAPS_LOAD_TIMEOUT_MS);
+    s.onload = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    s.onerror = () => {
+      clearTimeout(timer);
+      mapsLoading = null;
+      reject(new Error('Failed to load Google Maps'));
+    };
     document.head.appendChild(s);
   });
   return mapsLoading;
