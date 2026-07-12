@@ -1,40 +1,80 @@
 # Releasing `@addressiq/iqcollect-web`
 
 This repo publishes the **AddressIQ IQCollect web SDK** to npm as
-**`@addressiq/iqcollect-web`** (current version **`0.2.0`** — see
-`package.json:2`, `.release-please-manifest.json:2`). Scope: address collection
+**`@addressiq/iqcollect-web`** (current version **`0.5.3`** — see
+`package.json:3`, `.release-please-manifest.json:2`). Scope: address collection
 only; verification lives in the mobile SDKs (`package.json:4`).
 
 Releases are automated end to end via **release-please** plus a
 **tag-triggered `release.yml`**. You should never tag or run `npm publish`
 by hand — the flow below does both for you.
 
+A release fans out to **three** publishing workflows, all of which build the
+bundle and all of which run `npm run check-config` on the emitted bytes before
+publishing anything (§2c): `release.yml` (npm), `cdn.yml` (the two CDNs, §2b)
+and `widget-fanout.yml` (the four native SDKs, §1).
+
 ---
 
 ## 1. What ships, and the widget fanout
 
-- **npm package:** `@addressiq/iqcollect-web` (`package.json:1`), published with
+- **npm package:** `@addressiq/iqcollect-web` (`package.json:2`), published with
   public access (`package.json:18-20`, and `--access public` in
-  `release.yml:44,46`). Only `dist/` is packed (`package.json:15-17`).
-- **`widget-fanout.yml`** keeps the vendored widget bundle in sync. `dist/iqcollect.js`
-  is vendored byte-identical into four SDK repos, and previously nothing kept
-  those copies current (`widget-fanout.yml:2-8`). On a **web release**
-  (`release: published`, `widget-fanout.yml:19-21`) it builds the bundle once,
-  then opens a re-vendor PR in each consumer:
+  `release.yml:65,67`). Only `dist/` is packed (`package.json:15-17`).
+- **`widget-fanout.yml`** keeps the four native SDKs in sync with the widget. On a
+  **web release** (`release: published`, `widget-fanout.yml:19-21`) it builds the
+  bundle, then opens a re-vendor PR in each consumer:
 
-  | Consumer repo | Destination (`widget-fanout.yml:68-77`) |
-  |---|---|
-  | `addressiq-ios` | `Sources/AddressIQ/Resources/iqcollect.js` |
-  | `addressiq-flutter` | `assets/iqcollect.js` |
-  | `addressiq-android` | `src/main/assets/iqcollect.js` |
-  | `addressiq-react-native` | `src/ui/widgetBundle.ts` (regenerated TS string literal) |
+  | Consumer repo | Destination | Vendored artifact (`widget-fanout.yml:147-165`) |
+  |---|---|---|
+  | `addressiq-ios` | `Sources/AddressIQ/Resources/iqcollect.js` | `iqcollect` (keyed) |
+  | `addressiq-flutter` | `assets/iqcollect.js` | **`iqcollect-nokey`** (see below) |
+  | `addressiq-android` | `src/main/assets/iqcollect.js` | `iqcollect` (keyed) |
+  | `addressiq-react-native` | `src/ui/widgetBundle.ts` (regenerated TS string literal) | `iqcollect` (keyed) |
 
   Each PR lands as `feat(widget): re-vendor iqcollect.js from web vX.Y.Z`
-  (`widget-fanout.yml:143-144`), so **release-please in the consumer cuts a
+  (`widget-fanout.yml:239-240`), so **release-please in the consumer cuts a
   minor** on merge. React Native is special-cased because its bundle is a TS
-  string literal rather than an asset (`widget-fanout.yml:75,107-120`). A
+  string literal rather than an asset (`widget-fanout.yml:196-211`). A
   `workflow_dispatch` run defaults to `dry_run: true` — build and diff, open no
-  PRs (`widget-fanout.yml:23-27,137`).
+  PRs (`widget-fanout.yml:23-27,233`).
+
+- **The vendored bundle is only the fallback — the SDKs load the widget from the
+  CDN.** Each fanout leg writes **two pin files** into the consumer repo
+  (`widget-fanout.yml:212-219`):
+
+  | File | Contents |
+  |---|---|
+  | `.widget-version` | `vX.Y.Z` |
+  | `.widget-integrity` | the `sha384-…` SRI hash of `iqcollect.js` |
+
+  The SDK bakes both into its build config and loads
+  `https://{cdn}/v{X.Y.Z}/iqcollect.js` with
+  `<script integrity="sha384-…" crossorigin="anonymous">`, falling back to its
+  vendored copy via `onerror`. The hash is generated from **the same build
+  `cdn.yml` uploads on the same release event** (`widget-fanout.yml:41-48,72-92`),
+  which is what makes the pinned hash match the bytes the CDN actually serves.
+  The CDN is therefore **not a web-partner-only concern**: the immutable
+  `/v{x.y.z}/` layout and the `MANIFEST.json` SRI hashes are load-bearing for our
+  own mobile apps.
+
+- **Two builds, because of pub.dev.** The job builds a second, **key-free** bundle
+  (uploaded as artifact `iqcollect-nokey`, `widget-fanout.yml:113-138`) and vendors
+  *that* into `addressiq-flutter` only: pub.dev scans packages for credentials and
+  **refuses to publish one containing a Google API key**. This costs nothing —
+  the vendored bundle is only the offline fallback and is never SRI-checked, so
+  Flutter still fetches and verifies the **keyed CDN bundle** exactly like the
+  other three; and in the fallback path the Maps key comes from the backend's
+  `/widget/config`, which already takes priority over the baked key
+  (`src/flow.ts:111`). The key-free build asserts the strip actually worked
+  (`node scripts/check-baked-config.mjs --allow-empty-maps-key`, plus a literal
+  `AIzaSy…` grep, `widget-fanout.yml:125-130`).
+
+  > **The Maps key is public by design.** It is baked into the CDN bundle and the
+  > npm bundle and is readable by anyone who reads the JS. Secrecy is not the
+  > control: the key **must** be restricted in the Google Cloud Console (HTTP
+  > referrer + API restrictions). The key-free Flutter bundle exists only to get
+  > past pub.dev's scanner, not to keep the key secret.
 
 ---
 
@@ -75,32 +115,47 @@ Tags separate as `vX.Y.Z` (no component in the tag), matching the
 
 ## 2b. CDN publish (`cdn.yml`) — two environments
 
-`cdn.yml` builds, size-checks, generates `MANIFEST.json`, and uploads to
-**DigitalOcean Spaces**. It publishes to **two separate CDNs with two separate
-sets of credentials**:
+`cdn.yml` builds, **verifies the baked config** (§2c), size-checks, generates
+`MANIFEST.json`, and uploads to **DigitalOcean Spaces**. It publishes to **two
+separate CDNs with two separate sets of credentials** (`cdn.yml:56-61,78-101`):
 
-| Trigger | Target | GitHub Environment |
-|---|---|---|
-| push to **`staging`** branch | staging CDN | `staging` |
-| **`release: published`** | production CDN | `production` |
-| `workflow_dispatch` | either (`target` input) | picked |
+| Trigger | Target | GitHub Environment | Host (both live) |
+|---|---|---|---|
+| push to **`staging`** branch | staging CDN | `staging` | `cdn-staging.addressiqpro.com` |
+| **`release: published`** | production CDN | `production` | `cdn.addressiqpro.com` |
+| `workflow_dispatch` | either (`target` input) | picked | — |
 
-**Credentials come from GitHub Environments, not repo secrets.** A run targeting
-`staging` can only see the staging Spaces key — it is not merely *configured* not
-to touch the prod bucket, it *cannot*. Configure under **Settings → Environments**:
+**Credentials come from GitHub Environments, not repo secrets** (`cdn.yml:86-101`).
+A run targeting `staging` can only see the staging Spaces key — it is not merely
+*configured* not to touch the prod bucket, it *cannot*. Configure under
+**Settings → Environments**:
 
 | Kind | Name | Value |
 |---|---|---|
 | Secret | `SPACES_ACCESS_KEY_ID` | DO **Spaces** access key (API → Spaces Keys — *not* a DO API token) |
 | Secret | `SPACES_SECRET_ACCESS_KEY` | the paired secret |
+| Secret | `GOOGLE_MAPS_SDK_KEY` | the Maps JS key for that environment |
 | Var | `SPACES_BUCKET` | Space name for that environment |
 | Var | `SPACES_REGION` | e.g. `nyc3` (endpoint is derived: `nyc3.digitaloceanspaces.com`) |
 | Var | `CDN_BASE_URL` | the host **this environment uploads to** — e.g. `https://cdn-staging.addressiqpro.com` / `https://cdn.addressiqpro.com` |
 
-The six `*_ADDRESSIQ_*_BASE_URL` build vars and `GOOGLE_MAPS_SDK_KEY` stay at
-**repo** level: the bundle bakes *both* host sets in and switches at runtime, so
-the artifact is identical for staging and production. Only *where it is uploaded*
-differs.
+**`GOOGLE_MAPS_SDK_KEY` is environment-scoped too** (`cdn.yml:17-24`), so a staging
+build bakes the staging key and a production build the production one — the two
+bundles are deliberately **not** byte-identical, which is fine because they are
+uploaded to different CDNs and hashed independently.
+
+⚠ **Any workflow that builds a shippable bundle must therefore bind to an
+environment**, or the secret resolves to an empty string and ships a widget whose
+Maps autocomplete silently does nothing. `release.yml:26` and
+`widget-fanout.yml:45` are both pinned to `environment: production` for exactly
+this reason — and `check-config` (§2c) asserts it worked.
+
+The six `*_ADDRESSIQ_*_BASE_URL` build vars stay at **repo** level: the bundle
+bakes *both* host sets in and switches at runtime (`src/buildConfig.ts:36-63`).
+
+> **The Maps key baked into the CDN bundle is public.** Anyone can read it out of
+> the served JS — that is by design. Restrict it in the Google Cloud Console (HTTP
+> referrer + API restrictions); do not treat it as a secret.
 
 **Why production publishes on `release: published`, not a branch push.** That same
 event runs `widget-fanout.yml`, which writes `.widget-version` + `.widget-integrity`
@@ -110,36 +165,39 @@ drift. A branch push would decouple them, and an SDK could pin a hash for bytes
 that were never published.
 
 **The layout is immutable and versioned. There is no `latest/` or `v0/` alias.**
-The reason is SRI: the native SDKs (RELEASE-ENGINEERING.md §6d) and web partners
-both pin `<script integrity="sha384-…">`, and a floating URL cannot be pinned.
-New version ⇒ new prefix:
+The reason is SRI: **the four native SDKs** (via `.widget-integrity`, §1) and web
+partners both pin `<script integrity="sha384-…">`, and a floating URL cannot be
+pinned. New version ⇒ new prefix:
 
 ```
-cdn.addressiqpro.com/v0.4.0/iqcollect.js       (+ .js.map)
-cdn.addressiqpro.com/v0.4.0/index.esm.js       (+ .js.map)
-cdn.addressiqpro.com/v0.4.0/index.cjs.js       (+ .js.map)
-cdn.addressiqpro.com/v0.4.0/MANIFEST.json
+cdn.addressiqpro.com/v0.5.3/iqcollect.js       (+ .js.map)
+cdn.addressiqpro.com/v0.5.3/index.esm.js       (+ .js.map)
+cdn.addressiqpro.com/v0.5.3/index.cjs.js       (+ .js.map)
+cdn.addressiqpro.com/v0.5.3/MANIFEST.json
 ```
 
 Objects ship `cache-control: public, max-age=31536000, immutable`, so there is no
 purge step to get wrong.
 
-**Overwrite policy differs by target:**
+**Overwrite policy differs by target** (`cdn.yml:193-216`):
 
 - **production** — write-once. A re-run against an existing `/v{x.y.z}/` prefix
-  **fails**. Partners and the SDKs' SRI pins depend on those bytes.
+  **fails** (`cdn.yml:211-213`). Partners and the SDKs' SRI pins depend on those
+  bytes.
 - **staging** — overwrite is **allowed**, so the branch can be iterated on without
-  a version bump. ⚠ The job emits a warning when it overwrites: any SDK staging
-  build that already pinned an SRI hash for that version will now **fail the
-  integrity check and silently fall back to its bundled widget**. Bump the version
-  if you need staging to genuinely exercise the CDN path.
+  a version bump. ⚠ The job emits a warning when it overwrites (`cdn.yml:216`): any
+  SDK staging build that already pinned an SRI hash for that version will now
+  **fail the integrity check and silently fall back to its bundled widget**. Bump
+  the version if you need staging to genuinely exercise the CDN path.
 
-Two guards that apply to both:
+Three guards that apply to both:
 
-1. **Upload list comes from `MANIFEST.json`, not a `dist/` glob** — the bytes
-   uploaded are exactly the bytes that were hashed.
-2. **Read-back verification** — every object is re-downloaded from the origin and
-   re-hashed against `MANIFEST.json`; a mismatch fails the run.
+1. **`check-config` on the emitted bytes** (`cdn.yml:143-144`) — see §2c; runs
+   before the upload can happen.
+2. **Upload list comes from `MANIFEST.json`, not a `dist/` glob**
+   (`cdn.yml:228-230`) — the bytes uploaded are exactly the bytes that were hashed.
+3. **Read-back verification** (`cdn.yml:259-291`) — every object is re-downloaded
+   from the origin and re-hashed against `MANIFEST.json`; a mismatch fails the run.
 
 `scripts/generate-manifest.mjs` resolves the manifest's `cdn` field from
 `CDN_BASE_URL`, the same var `cdn.yml` uploads to, and the workflow asserts the
@@ -151,23 +209,61 @@ cert), and point the CNAME at the Spaces CDN endpoint.
 
 ---
 
+## 2c. `check-config` — assert on the bytes, not the config
+
+`scripts/check-baked-config.mjs` (npm script `check-config`, `package.json:31`)
+reads `dist/iqcollect.js` and asserts that (1) `GOOGLE_MAPS_SDK_KEY` is actually
+baked in — the terser output is `googleMapsApiKey||"<key>"`, and an unbaked build
+renders `googleMapsApiKey||""` (`scripts/check-baked-config.mjs:40-53`) — and (2)
+no `__ADDRESSIQ_*` / `__GOOGLE_MAPS_SDK_KEY__` build placeholder is left unresolved
+(`scripts/check-baked-config.mjs:57-59`).
+
+It runs, **without** the escape-hatch flag, in **all three** publishing workflows
+before anything is published: `release.yml:49-50`, `cdn.yml:143-144`,
+`widget-fanout.yml:70-71`. Local builds may pass `--allow-empty-maps-key`
+(`scripts/check-baked-config.mjs:25`); the Flutter key-free build uses that flag to
+assert the *opposite* (`widget-fanout.yml:126`).
+
+**Why it exists — the most useful lesson in this repo.** The six-variable build
+refactor silently dropped `GOOGLE_MAPS_SDK_KEY` from the `env:` block of
+`release.yml` and `widget-fanout.yml`. Both workflows still *mentioned* the key —
+in a comment — so grepping the workflow files for it looked correct. **A missing
+build secret does not fail a build:** the `__GOOGLE_MAPS_SDK_KEY__` placeholder
+resolves to an empty string, `BUILD_CONFIG.mapsKey` falls back to `''`
+(`src/buildConfig.ts:66-69`), and the bundle is perfectly valid. npm **v0.5.0** and
+the widget fanned out to all four SDKs shipped with `googleMapsApiKey || ""` —
+Places autocomplete silently dead, discoverable only in a partner's app. Only the
+SRI pin caught it: the fanout bundle no longer matched the CDN bundle. (Fixed in
+v0.5.1, `CHANGELOG.md:15`.)
+
+The takeaway is general: **grepping a config file cannot catch this class of bug.
+Only an assertion on the emitted artifact can.**
+
+---
+
 ## 3. Auth and secrets
 
 **npm publish (`release.yml`):** uses an npm automation token in the
 `NPM_TOKEN` secret, exposed to the publish step as `NODE_AUTH_TOKEN`
-(`release.yml:6,32-33`) with the registry set to `registry.npmjs.org`
-(`release.yml:27`). There is **no npm provenance / OIDC** configured in this
+(`release.yml:6,53-54`) with the registry set to `registry.npmjs.org`
+(`release.yml:32`). There is **no npm provenance / OIDC** configured in this
 workflow — auth is the `NPM_TOKEN` secret only.
 
 **release-please tag push (`release-please.yml`) and widget fanout
 (`widget-fanout.yml`):** authenticate via a **GitHub App**, using secrets
 `ADDRESSIQ_BOT_APP_ID` and `ADDRESSIQ_BOT_PRIVATE_KEY`
-(`release-please.yml:11,33-34`; `widget-fanout.yml:17,84-85`). In the fanout the
+(`release-please.yml:11,33-34`; `widget-fanout.yml:17,172-173`). In the fanout the
 token is minted **per matrix leg** and narrowed to that one consumer repo
-(`repositories: ${{ matrix.repo }}`, `widget-fanout.yml:86-87`), so a leg
+(`repositories: ${{ matrix.repo }}`, `widget-fanout.yml:174-175`), so a leg
 writing to one consumer holds no credential for the others. This is the same
 App used by release-please. The App needs only `contents: write` and
 `pull_requests: write` (per RELEASE-ENGINEERING.md §4.A).
+
+**Build secrets are environment-scoped, not repo-scoped.** `GOOGLE_MAPS_SDK_KEY`
+and the two `SPACES_*` keys live in the `staging` / `production` GitHub
+Environments (§2b). Any job that builds a shippable bundle must declare
+`environment:` — `release.yml:26` and `widget-fanout.yml:45` declare `production`;
+`cdn.yml:89` resolves it from the trigger.
 
 ---
 
@@ -191,11 +287,12 @@ messages are the sole input.
 ## 5. Local validation
 
 Validate packaging without publishing, using the same registry step
-`release.yml` uses on a dry run (`release.yml:44`):
+`release.yml` uses on a dry run (`release.yml:65`):
 
 ```bash
 npm install
 npm run build
+npm run check-config -- --allow-empty-maps-key   # a local build has no Maps key
 npm test
 npm publish --access public --no-workspaces --dry-run
 ```
@@ -209,7 +306,9 @@ npm pack --dry-run
 
 You can also trigger the real workflow in dry-run mode from the Actions tab:
 `workflow_dispatch` on **Release** defaults to `dry_run: true`, which validates
-packaging and publishes nothing (`release.yml:11-16,40,43-44`).
+packaging and publishes nothing (`release.yml:11-16,61,64-65`). **CDN** and
+**widget-fanout** have the same dry-run default (`cdn.yml:68-71`,
+`widget-fanout.yml:23-27`).
 
 ---
 
