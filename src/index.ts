@@ -260,8 +260,8 @@ export class IQCollect {
 
   /**
    * ISO-3166 countries for the address form's Country dropdown, fetched from the
-   * backend (the canonical list) and cached. Returns [] on failure so the widget
-   * falls back to its small embedded list.
+   * backend (the canonical list) and cached. Returns [] on failure — the widget
+   * then degrades the Country field to free text (it embeds no list of its own).
    */
   async fetchCountries(): Promise<Array<{ code: string; name: string }>> {
     if (this.countriesCache) return this.countriesCache;

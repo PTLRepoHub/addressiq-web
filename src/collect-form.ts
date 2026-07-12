@@ -20,8 +20,8 @@ interface FormConfig {
   theme?: 'light' | 'dark' | 'system';
   locationProvider: LocationProvider;
   business?: BusinessBranding;
-  /** Backend reference data for the Country/State dropdowns (falls back to the
-   * small embedded lists when absent or on failure). */
+  /** Backend reference data for the Country/State dropdowns. The SDK embeds no
+   * list of its own — when absent or on failure the fields degrade to free text. */
   fetchCountries?: () => Promise<Array<{ code: string; name: string }>>;
   fetchStates?: (countryCode: string) => Promise<Array<{ code: string; name: string }>>;
 }
@@ -43,39 +43,7 @@ type SubmitFn = (input: {
 
 const COLORS = ['White', 'Brown', 'Blue', 'Red', 'Grey', 'Yellow', 'Green', 'Cream'];
 
-// ISO-3166 country names for the Country dropdown.
-const COUNTRIES = [
-  'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria', 'Azerbaijan',
-  'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi',
-  'Cabo Verde', 'Cambodia', 'Cameroon', 'Canada', 'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica', "Côte d'Ivoire", 'Croatia', 'Cuba', 'Cyprus', 'Czechia',
-  'Democratic Republic of the Congo', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic',
-  'Ecuador', 'Egypt', 'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia',
-  'Fiji', 'Finland', 'France', 'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala', 'Guinea', 'Guinea-Bissau', 'Guyana',
-  'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan',
-  'Kazakhstan', 'Kenya', 'Kiribati', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Lithuania', 'Luxembourg',
-  'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico', 'Micronesia', 'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar',
-  'Namibia', 'Nauru', 'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman',
-  'Pakistan', 'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda',
-  'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'Sao Tome and Principe', 'Saudi Arabia', 'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia', 'South Africa', 'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria',
-  'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey', 'Turkmenistan', 'Tuvalu',
-  'Uganda', 'Ukraine', 'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe',
-];
 
-// First-level subdivisions for countries where we drive a State dropdown. Keyed
-// by the name Google returns for `country`. Countries not listed fall back to a
-// free-text State field. Names match Google's `administrative_area_level_1`.
-const SUBDIVISIONS: Record<string, string[]> = {
-  Nigeria: [
-    'Abia', 'Adamawa', 'Akwa Ibom', 'Anambra', 'Bauchi', 'Bayelsa', 'Benue', 'Borno', 'Cross River', 'Delta', 'Ebonyi', 'Edo', 'Ekiti', 'Enugu',
-    'Federal Capital Territory', 'Gombe', 'Imo', 'Jigawa', 'Kaduna', 'Kano', 'Katsina', 'Kebbi', 'Kogi', 'Kwara', 'Lagos', 'Nasarawa', 'Niger', 'Ogun',
-    'Ondo', 'Osun', 'Oyo', 'Plateau', 'Rivers', 'Sokoto', 'Taraba', 'Yobe', 'Zamfara',
-  ],
-  Ghana: ['Ahafo', 'Ashanti', 'Bono', 'Bono East', 'Central', 'Eastern', 'Greater Accra', 'North East', 'Northern', 'Oti', 'Savannah', 'Upper East', 'Upper West', 'Volta', 'Western', 'Western North'],
-  Kenya: ['Baringo', 'Bomet', 'Bungoma', 'Busia', 'Elgeyo-Marakwet', 'Embu', 'Garissa', 'Homa Bay', 'Isiolo', 'Kajiado', 'Kakamega', 'Kericho', 'Kiambu', 'Kilifi', 'Kirinyaga', 'Kisii', 'Kisumu', 'Kitui', 'Kwale', 'Laikipia', 'Lamu', 'Machakos', 'Makueni', 'Mandera', 'Marsabit', 'Meru', 'Migori', 'Mombasa', 'Murang’a', 'Nairobi', 'Nakuru', 'Nandi', 'Narok', 'Nyamira', 'Nyandarua', 'Nyeri', 'Samburu', 'Siaya', 'Taita-Taveta', 'Tana River', 'Tharaka-Nithi', 'Trans Nzoia', 'Turkana', 'Uasin Gishu', 'Vihiga', 'Wajir', 'West Pokot'],
-  'South Africa': ['Eastern Cape', 'Free State', 'Gauteng', 'KwaZulu-Natal', 'Limpopo', 'Mpumalanga', 'North West', 'Northern Cape', 'Western Cape'],
-  'United States': ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming', 'District of Columbia'],
-  Canada: ['Alberta', 'British Columbia', 'Manitoba', 'New Brunswick', 'Newfoundland and Labrador', 'Northwest Territories', 'Nova Scotia', 'Nunavut', 'Ontario', 'Prince Edward Island', 'Quebec', 'Saskatchewan', 'Yukon'],
-};
 
 let mapsLoading: Promise<void> | null = null;
 
@@ -167,7 +135,7 @@ export class CollectForm {
   private userPinned = false;
   /** Guards against firing the auto-locate request more than once. */
   private autoLocateTried = false;
-  /** Backend reference data (null until loaded; falls back to embedded lists). */
+  /** Backend reference data (null until loaded; the field is free text until then). */
   private countries: Array<{ code: string; name: string }> | null = null;
   private countriesLoading = false;
   /** Lazily-loaded states per ISO country code. */
@@ -327,16 +295,23 @@ export class CollectForm {
     body.appendChild(title('Property details', 'Confirm your address and help us identify your building.'));
 
     // — Address: pre-filled from the selected map pin, but editable. —
-    // Country/State come from the backend reference list (cached), falling back
-    // to the small embedded lists when the backend is unreachable.
+    // Country/State are reference data owned by the backend
+    // (`/api/v1/reference/countries[/{code}/states]`, cached). The SDK embeds no
+    // country or subdivision list — stale reference data in a shipped bundle is
+    // worse than none. Until the list arrives (or if the backend is unreachable)
+    // the field degrades to free text, exactly like `stateField` does.
     this.ensureCountries();
     body.appendChild(section('Address'));
-    const countryNames = (this.countries?.map((c) => c.name)) ?? COUNTRIES;
-    body.appendChild(this.selectField('Country', 'country', countryNames, () => {
-      // Country changed → any state from the old country no longer applies.
-      this.state.region = '';
-      this.render();
-    }));
+    const countryNames = this.countries?.map((c) => c.name) ?? [];
+    body.appendChild(
+      countryNames.length
+        ? this.selectField('Country', 'country', countryNames, () => {
+            // Country changed → any state from the old country no longer applies.
+            this.state.region = '';
+            this.render();
+          })
+        : this.textField('Country', 'country', 'Country'),
+    );
     const row = el('div', 'iq-row');
     row.appendChild(this.stateField());
     row.appendChild(this.textField('City', 'city', 'City'));
@@ -365,25 +340,20 @@ export class CollectForm {
   }
 
   /**
-   * The State control: a dropdown of the selected country's subdivisions when we
-   * have them (from the backend, or the embedded fallback), else a free-text field.
+   * The State control: a dropdown of the selected country's subdivisions when the
+   * backend has them, else a free-text field. Subdivisions are backend reference
+   * data — the SDK embeds no list of its own.
    */
   private stateField(): HTMLElement {
-    const countryName = this.state.country;
-    if (this.config.fetchStates) {
-      // Backend mode — resolve the ISO code for the chosen country, then lazy-load.
-      const code = this.countries?.find((c) => c.name === countryName)?.code;
-      if (code) {
-        this.ensureStates(code);
-        const list = this.statesByCode[code];
-        if (list && list.length) return this.selectField('State', 'region', list.map((s) => s.name));
-        // Loaded-but-empty (no subdivisions) or still loading → free-text for now.
-      }
-      return this.textField('State', 'region', 'State / province');
+    // Resolve the ISO code for the chosen country, then lazy-load its subdivisions.
+    const code = this.countries?.find((c) => c.name === this.state.country)?.code;
+    if (code) {
+      this.ensureStates(code);
+      const list = this.statesByCode[code];
+      if (list && list.length) return this.selectField('State', 'region', list.map((s) => s.name));
+      // Loaded-but-empty (country has no subdivisions) or still loading → free text.
     }
-    // Fallback mode — embedded subdivisions keyed by country name.
-    const subs = SUBDIVISIONS[countryName];
-    return subs ? this.selectField('State', 'region', subs) : this.textField('State', 'region', 'State / province');
+    return this.textField('State', 'region', 'State / province');
   }
 
   /** Load the country list once (cached upstream); re-render when it arrives. */
