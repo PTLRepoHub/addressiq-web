@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/PTLRepoHub/addressiq-web/compare/v0.4.1...v0.4.2) (2026-07-12)
+
+
+### Bug Fixes
+
+* stop baking the Google Maps key into published bundles ([#10](https://github.com/PTLRepoHub/addressiq-web/issues/10)) ([88dc718](https://github.com/PTLRepoHub/addressiq-web/commit/88dc718700dfd3f234232576c73bda64f65c0aca))
+
 ## [0.4.1](https://github.com/PTLRepoHub/addressiq-web/compare/v0.4.0...v0.4.1) (2026-07-12)
 
 
