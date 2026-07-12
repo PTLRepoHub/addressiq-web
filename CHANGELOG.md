@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/PTLRepoHub/addressiq-web/compare/v0.5.0...v0.5.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* bake GOOGLE_MAPS_SDK_KEY into the npm and fanned-out bundles ([#14](https://github.com/PTLRepoHub/addressiq-web/issues/14)) ([51dc339](https://github.com/PTLRepoHub/addressiq-web/commit/51dc3394317e64dd4be67196059f7757629aef2c))
+
 ## [0.5.0](https://github.com/PTLRepoHub/addressiq-web/compare/v0.4.2...v0.5.0) (2026-07-12)
 
 
