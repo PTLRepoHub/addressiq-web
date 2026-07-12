@@ -97,6 +97,46 @@ jobs:
           path: dist/iqcollect.js
           if-no-files-found: error
 
+      # A SECOND, key-free build — for pub.dev only.
+      #
+      # pub.dev scans packages for credentials and REFUSES to publish one that
+      # contains a Google API key ("Potential leak of Google API Key in
+      # assets/iqcollect.js"). It is right to: the Flutter package is public.
+      #
+      # This costs nothing, because the vendored bundle is only the *fallback*.
+      # The SRI pin (`.widget-integrity`) hashes the bytes on the CDN, NOT this
+      # file — so Flutter still fetches and integrity-checks the keyed CDN bundle
+      # exactly like the other SDKs. The keyless copy is used only when the CDN is
+      # unreachable, and in that path the Maps key comes from the backend's
+      # /widget/config anyway, which takes priority over the baked one
+      # (addressiq-web/src/flow.ts:111).
+      - name: Build a key-free bundle for pub.dev (Flutter)
+        env:
+          STAGING_ADDRESSIQ_API_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_API_BASE_URL }}
+          STAGING_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_BASE_URL }}
+          STAGING_ADDRESSIQ_CDN_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_BASE_URL }}
+          PROD_ADDRESSIQ_API_BASE_URL: ${{ vars.PROD_ADDRESSIQ_API_BASE_URL }}
+          PROD_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_BASE_URL }}
+          PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
+          # deliberately NOT passing GOOGLE_MAPS_SDK_KEY
+        run: |
+          set -euo pipefail
+          npm run build
+          # The guard must now REFUSE to find a key — assert the strip worked.
+          node scripts/check-baked-config.mjs --allow-empty-maps-key
+          if grep -qoE 'AIzaSy[A-Za-z0-9_-]{10}' dist/iqcollect.js; then
+            echo "::error::the key-free bundle still contains a Google API key — pub.dev will reject it" >&2
+            exit 1
+          fi
+          mkdir -p /tmp/nokey && cp dist/iqcollect.js /tmp/nokey/iqcollect.js
+          echo "key-free bundle OK ($(wc -c < /tmp/nokey/iqcollect.js) bytes)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iqcollect-nokey
+          path: /tmp/nokey/iqcollect.js
+          if-no-files-found: error
+
   fanout:
     name: ${{ matrix.repo }}
     needs: build
@@ -107,13 +147,22 @@ jobs:
         include:
           - repo: addressiq-ios
             dest: Sources/AddressIQ/Resources/iqcollect.js
+            artifact: iqcollect
+          # pub.dev refuses to publish a package containing a Google API key, so
+          # Flutter vendors the KEY-FREE build. Harmless: the vendored bundle is
+          # only the offline fallback — the SRI pin hashes the CDN bytes, so
+          # Flutter still fetches and verifies the keyed CDN bundle like everyone
+          # else, and in the fallback path the key comes from /widget/config.
           - repo: addressiq-flutter
             dest: assets/iqcollect.js
+            artifact: iqcollect-nokey
           - repo: addressiq-android
             dest: src/main/assets/iqcollect.js
+            artifact: iqcollect
           # RN embeds the bundle as a TS string literal rather than an asset.
           - repo: addressiq-react-native
             dest: src/ui/widgetBundle.ts
+            artifact: iqcollect
 
     steps:
       - name: Mint GitHub App token
@@ -133,7 +182,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: iqcollect
+          name: ${{ matrix.artifact }}
           path: /tmp/widget
 
       - name: Re-vendor
