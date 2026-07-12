@@ -85,7 +85,7 @@ the API key. Against the real API it's the org's name (e.g. "AddressIQ Demo
 Bank"); in fake mode, edit `business` in `mock-fixtures.json`.
 
 ### The map
-The address step shows a real map. You don't supply a Maps/Mapbox key — the
+The address step shows a real map. You don't supply a Google Maps key — the
 platform provisions the map key and the widget receives it from the backend via
 `GET /api/v1/widget/config`, alongside the business name and branding. If the
 backend doesn't return a key (for example in fake/offline mode), the address step
@@ -126,7 +126,7 @@ Point the widget at it with `?api=http://localhost:3355` (e.g.
 API key server-side — so the key is never sent to the browser. Point `ENVIRONMENT`
 at `staging` or `production` to use the hosted APIs instead. First run:
 `cp .env.example .env` (set your AddressIQ API key). You don't need to provide a
-Maps/Mapbox key — the platform provisions it and delivers it to the widget via
+Google Maps key — the platform provisions it and delivers it to the widget via
 `GET /api/v1/widget/config`.
 
 **Fake mode** needs no API at all — handy for a quick offline look or for
