@@ -30,10 +30,12 @@ export interface SavedAddress {
 
 export interface IQCollectConfig {
   apiKey: string;
-  /** Which hosted API to use. The SDK resolves the URL internally. */
-  environment?: 'sandbox' | 'production';
-  /** Override the resolved API URL — for local development only. */
-  apiUrl?: string;
+  /**
+   * Which API to target. The SDK resolves the URL internally — integrators
+   * never pass a URL. `development` points at a local backend
+   * (http://localhost:3355); production/sandbox auto-resolve to the hosted APIs.
+   */
+  environment?: 'sandbox' | 'production' | 'development';
   appUserId: string;
   /** Per-business branding for the intro + collaboration + consent screens. */
   business?: BusinessBranding;
@@ -43,13 +45,6 @@ export interface IQCollectConfig {
    * owned natively.
    */
   locationProvider?: LocationProvider;
-  /**
-   * Google Maps JS API key. Normally the SDK fetches this from the backend
-   * (`GET /api/v1/widget/config`), so integrators don't supply it — set this
-   * only to override the platform key. Without any key the address step
-   * degrades to a manual text field.
-   */
-  googleMapsApiKey?: string;
   /** Country code (ISO 3166-1 alpha-2) used by the place-search API. */
   country?: string;
   /** Optional pre-filled customer details to skip the collection form. */

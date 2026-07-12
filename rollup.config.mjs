@@ -11,8 +11,24 @@
 import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
 import terser from '@rollup/plugin-terser';
+import replace from '@rollup/plugin-replace';
 
 const externalESM = []; // nothing external — IQCollect is dependency-free.
+
+// Build-time values baked into every bundle. Sourced from the GitHub
+// environment in CI (the `ADDRESSIQ_API_URL` variable + `GOOGLE_MAPS_SDK_KEY`
+// secret); safe fallbacks keep local `npm run build` working without them.
+// Consumed via src/buildConfig.ts (which also guards tsc/jest runs).
+const buildReplace = () =>
+  replace({
+    preventAssignment: true,
+    values: {
+      __ADDRESSIQ_API_URL__: JSON.stringify(
+        process.env.ADDRESSIQ_API_URL || 'https://api.addressiqpro.com',
+      ),
+      __GOOGLE_MAPS_SDK_KEY__: JSON.stringify(process.env.GOOGLE_MAPS_SDK_KEY || ''),
+    },
+  });
 
 export default [
   // ESM + CJS for npm consumers.
@@ -23,7 +39,7 @@ export default [
       { file: 'dist/index.cjs.js', format: 'cjs', sourcemap: true, exports: 'named' },
     ],
     external: externalESM,
-    plugins: [resolve(), typescript({ tsconfig: './tsconfig.json' })],
+    plugins: [buildReplace(), resolve(), typescript({ tsconfig: './tsconfig.json' })],
   },
 
   // UMD for cdn.addressiqpro.com — minified.
@@ -38,6 +54,7 @@ export default [
       sourcemap: true,
     },
     plugins: [
+      buildReplace(),
       resolve(),
       typescript({ tsconfig: './tsconfig.json' }),
       terser({

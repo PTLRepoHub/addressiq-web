@@ -28,6 +28,7 @@ export type { LocationProvider, LocationFix } from './location-provider';
 import type { IQCollectConfig, AddressData, IQCollectError, SavedAddress } from './types';
 import { BROWSER_VERIFICATION_NOT_SUPPORTED_ERROR } from './types';
 import { FlowController } from './flow';
+import { BUILD_CONFIG } from './buildConfig';
 import { HostBridge } from './host-bridge';
 import { BrowserLocationProvider, BridgeLocationProvider, type LocationProvider } from './location-provider';
 
@@ -59,10 +60,12 @@ function writeRefCache(key: string, data: unknown): void {
   }
 }
 
-/** Hosted API URL per environment. Integrators pass `environment`, not a URL. */
-const ENVIRONMENT_URLS: Record<'sandbox' | 'production', string> = {
+/** API URL per environment. Integrators pass `environment`, not a URL. */
+const ENVIRONMENT_URLS: Record<'sandbox' | 'production' | 'development', string> = {
   sandbox: 'https://api-staging.addressiqpro.com',
-  production: 'https://api.addressiqpro.com',
+  // Baked in at build from the GH `ADDRESSIQ_API_URL` variable (see buildConfig).
+  production: BUILD_CONFIG.apiUrl,
+  development: 'http://localhost:3355',
 };
 
 /**
@@ -75,6 +78,8 @@ const ENVIRONMENT_URLS: Record<'sandbox' | 'production', string> = {
  */
 export class IQCollect {
   private readonly config: IQCollectConfig;
+  /** API base URL resolved from `config.environment`. */
+  private readonly apiUrl: string;
   private readonly mount: HTMLElement;
   private readonly bridge: HostBridge | null;
   private readonly locationProvider: LocationProvider;
@@ -91,10 +96,10 @@ export class IQCollect {
     if (!config.apiKey) throw new Error('IQCollect: apiKey is required');
     if (!config.appUserId) throw new Error('IQCollect: appUserId is required');
 
-    // Resolve the API URL from `environment` (integrators pass an enum, not a
-    // URL). `apiUrl` remains an override for local dev.
-    const apiUrl = config.apiUrl ?? ENVIRONMENT_URLS[config.environment ?? 'production'];
-    this.config = { ...config, apiUrl };
+    // Resolve the API URL purely from `environment` (integrators pass an enum,
+    // never a URL). Defaults to production.
+    this.apiUrl = ENVIRONMENT_URLS[config.environment ?? 'production'];
+    this.config = config;
     this.mount = mount;
     // In a native webview the shell owns the Always/Precise prompt + fix.
     this.bridge = HostBridge.detect();
@@ -110,7 +115,6 @@ export class IQCollect {
     this.mount.dataset.iqcollectVersion = SDK_VERSION;
     const flow = new FlowController(this.mount, {
       business: this.config.business,
-      googleMapsApiKey: this.config.googleMapsApiKey,
       theme: this.config.theme,
       platform: this.config.platform,
       locationProvider: this.locationProvider,
@@ -134,7 +138,7 @@ export class IQCollect {
   async fetchWidgetConfig(): Promise<{ business: import('./types').BusinessBranding | null; googleMapsApiKey?: string }> {
     try {
       const res = await fetch(
-        `${this.config.apiUrl}/api/v1/widget/config?appUserId=${encodeURIComponent(this.config.appUserId)}`,
+        `${this.apiUrl}/api/v1/widget/config?appUserId=${encodeURIComponent(this.config.appUserId)}`,
         { headers: this.headers() },
       );
       if (!res.ok) return { business: null };
@@ -152,7 +156,7 @@ export class IQCollect {
    */
   async listAddresses(): Promise<SavedAddress[]> {
     const res = await fetch(
-      `${this.config.apiUrl}/api/v1/locations?appUserId=${encodeURIComponent(this.config.appUserId)}`,
+      `${this.apiUrl}/api/v1/locations?appUserId=${encodeURIComponent(this.config.appUserId)}`,
       { headers: this.headers() },
     );
     const body = await res.json().catch(() => ({}));
@@ -174,7 +178,7 @@ export class IQCollect {
    * "keep your location on" email.
    */
   async startVerification(locationCode: string): Promise<{ verificationId: string }> {
-    const res = await fetch(`${this.config.apiUrl}/api/v1/verifications/start`, {
+    const res = await fetch(`${this.apiUrl}/api/v1/verifications/start`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({ appUserId: this.config.appUserId, locationCode }),
@@ -201,7 +205,7 @@ export class IQCollect {
     const cached = readRefCache<Array<{ code: string; name: string }>>('countries');
     if (cached && cached.length) return (this.countriesCache = cached);
     try {
-      const res = await fetch(`${this.config.apiUrl}/api/v1/reference/countries`, { headers: this.headers() });
+      const res = await fetch(`${this.apiUrl}/api/v1/reference/countries`, { headers: this.headers() });
       if (!res.ok) return [];
       const body = await res.json().catch(() => []);
       const list = Array.isArray(body) ? (body as Array<{ code: string; name: string }>) : [];
@@ -227,7 +231,7 @@ export class IQCollect {
     if (cached) return (this.statesCache[key] = cached);
     try {
       const res = await fetch(
-        `${this.config.apiUrl}/api/v1/reference/countries/${encodeURIComponent(key)}/states`,
+        `${this.apiUrl}/api/v1/reference/countries/${encodeURIComponent(key)}/states`,
         { headers: this.headers() },
       );
       if (!res.ok) return [];
@@ -287,7 +291,7 @@ export class IQCollect {
     // Collect a new Location. On native, verification is started by the shell
     // after handoff of the locationCode; the mock/server may also start it and
     // send the "keep your location on" email.
-    const res = await fetch(`${this.config.apiUrl}/api/v1/locations/collect`, {
+    const res = await fetch(`${this.apiUrl}/api/v1/locations/collect`, {
       method: 'POST',
       headers: { ...this.headers(), 'idempotency-key': idempotencyKey },
       body: JSON.stringify({

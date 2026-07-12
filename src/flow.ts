@@ -19,10 +19,10 @@ import type { AddressData, BusinessBranding, SavedAddress } from './types';
 import type { LocationProvider } from './location-provider';
 import { CollectForm, el, title, button, injectStyles, applyBrandingVars } from './collect-form';
 import { svgIcon, type IconName } from './icons';
+import { BUILD_CONFIG } from './buildConfig';
 
 export interface FlowConfig {
   business?: BusinessBranding;
-  googleMapsApiKey?: string;
   theme?: 'light' | 'dark' | 'system';
   /** Host OS (native shells only) — selects the platform-specific Settings screen. */
   platform?: 'ios' | 'android';
@@ -84,7 +84,7 @@ export class FlowController {
   private permissionPoll: ReturnType<typeof setInterval> | null = null;
   /** Resolved business branding: backend-provided values win over client config. */
   private business: BusinessBranding = { displayName: '' };
-  /** Resolved Google Maps key: client override wins, else backend-provided. */
+  /** Resolved Google Maps key: backend `/widget/config` wins (rotation), else the baked-in build key. */
   private googleMapsApiKey?: string;
 
   constructor(mount: HTMLElement, config: FlowConfig) {
@@ -106,7 +106,9 @@ export class FlowController {
       .loadConfig()
       .catch((): { business: BusinessBranding | null; googleMapsApiKey?: string } => ({ business: null }));
     this.business = mergeBusiness(this.config.business, remote.business);
-    this.googleMapsApiKey = this.config.googleMapsApiKey || remote.googleMapsApiKey;
+    // Hybrid, config-wins for rotation: the backend key (from /widget/config)
+    // takes priority over the key baked into the bundle at build time.
+    this.googleMapsApiKey = remote.googleMapsApiKey || BUILD_CONFIG.mapsKey;
     this.stage = 'intro';
     this.render();
   }

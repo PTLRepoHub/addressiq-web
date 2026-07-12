@@ -3,10 +3,12 @@
 These are ready-to-run demos of the AddressIQ web widget (the pop-up that lets a
 user add and verify their address).
 
-The easiest one to start with is **`local.html`**. By default it connects
-**directly to your local AddressIQ API** (the `geo-tagging` app on `:4000`) with a
-seeded test key, so you see the real flow. If you don't have the API running, you
-can switch to **fake data** for a fully offline demo — see
+The easiest one to start with is **`local.html`**. It passes
+`environment: 'development'`, so the SDK targets your **local AddressIQ backend on
+`http://localhost:3355`** with a seeded test key, and you see the real flow.
+Integrators never pass a URL — the SDK resolves it from `environment`
+(`production`, `sandbox`, or `development`). If you don't have a backend running,
+you can switch to **fake data** for a fully offline demo — see
 "[Optional: the sample server](#optional-the-sample-server)" below.
 
 ## The files here
@@ -24,14 +26,16 @@ can switch to **fake data** for a fully offline demo — see
 
 You need **Node.js 18 or newer**. That's the only thing to install.
 
-By default `local.html` talks **directly to your local AddressIQ API** (the
-`geo-tagging` app on `http://localhost:4000`) using a seeded test key. In dev the
-API allows all origins (CORS), so the browser can call it directly — no extra
-server, no `.env`. Just make sure geo-tagging is running on `:4000`.
+`local.html` passes `environment: 'development'`, so the SDK targets your local
+AddressIQ backend on `http://localhost:3355` using a seeded test key. In dev the
+backend allows all origins (CORS), so the browser can call it directly — no
+`.env`. Just make sure a backend is listening on `:3355` (see
+"[Optional: the sample server](#optional-the-sample-server)" for one way to run
+it, in forward or fake mode).
 
 ### Build and open the widget
 
-With `geo-tagging` running on `:4000`, that's the only step:
+With a backend running on `:3355`, that's the only step:
 
 ```bash
 cd addressiq-web
@@ -85,11 +89,14 @@ the API key. Against the real API it's the org's name (e.g. "AddressIQ Demo
 Bank"); in fake mode, edit `business` in `mock-fixtures.json`.
 
 ### The map
-The address step shows a real map. You don't supply a Google Maps key — the
-platform provisions the map key and the widget receives it from the backend via
-`GET /api/v1/widget/config`, alongside the business name and branding. If the
-backend doesn't return a key (for example in fake/offline mode), the address step
-falls back to a plain text box — everything else still works.
+The address step shows a real map. You don't supply a Google Maps key. A default
+key is baked into the published bundle at build time from the GitHub secret
+`GOOGLE_MAPS_SDK_KEY` (and the API URL from the `ADDRESSIQ_API_URL` variable). On
+top of that, the backend can deliver a key via `GET /api/v1/widget/config`,
+alongside the business name and branding — that value wins over the baked-in one,
+so keys rotate without a rebuild. If neither is present (for example in
+fake/offline mode), the address step falls back to a plain text box — everything
+else still works.
 
 ### Fake location vs. your real one
 By default the demo uses a fake location so it just works. Untick **"Fake
@@ -97,26 +104,27 @@ LocationProvider"** on the page to use your browser's real location instead. (On
 a real phone app, the app supplies the location, and the permission pop-up stays
 native.)
 
-### Point at a different backend
-You can tell `local.html` to use another server by adding `?api=` to the URL:
-
-```
-http://localhost:8077/examples/web/local.html?api=http://localhost:3355
-```
+### Which backend it talks to
+The SDK resolves the API URL from `environment` — integrators never pass a URL.
+`local.html` uses `environment: 'development'` (→ `http://localhost:3355`); the
+hosted paths are `environment: 'production'` and `environment: 'sandbox'`. To run
+against a different local backend, listen on `:3355` (or start the sample server
+there — see below).
 
 ---
 
 ## Optional: the sample server
 
-Talking to `:4000` directly is fine for local dev, but a real integration never
-ships an API key in the browser — the browser calls *your* server, which adds the
-key. `addressiq-node-backend` is the AddressIQ **Node server SDK** with a sample
-`server.js` that plays that role. It also lets you run **offline with fake data**.
+A real integration never ships an API key in the browser — the browser calls
+*your* server, which adds the key. `addressiq-node-backend` is the AddressIQ
+**Node server SDK** with a sample `server.js` that plays that role and listens on
+`:3355`, exactly where `environment: 'development'` points. It also lets you run
+**offline with fake data**.
 
-Point the widget at it with `?api=http://localhost:3355` (e.g.
-`local.html?api=http://localhost:3355`). The sample server can run two ways:
+Run it on `:3355` and the widget (using `environment: 'development'`) hits it with
+no further config. The sample server can run two ways:
 
-| Mode | How to start it | What the widget talks to | Needs the local API? |
+| Mode | How to start it | What the widget talks to | Needs the AddressIQ API? |
 |------|-----------------|--------------------------|----------------------|
 | **Forward** | `node server.js` | Your AddressIQ API (via `.env`) | Yes — running on `:4000` |
 | **Fake** (offline) | `MOCK_UPSTREAM=1 node server.js` | Made-up data from `mock-fixtures.json` | No |
@@ -140,9 +148,9 @@ demoing the two address-book branches via `mock-fixtures.json`.
 
 | Port | What runs there | Command |
 |------|-----------------|---------|
-| `4000` | The AddressIQ API (`geo-tagging`) — what the widget hits by default | (its own dev setup) |
+| `3355` | Local backend the widget hits via `environment: 'development'` — the sample server (real or fake) | `node server.js` (add `MOCK_UPSTREAM=1` for fake) |
+| `4000` | The AddressIQ API (`geo-tagging`) — what the sample server forwards to in forward mode | (its own dev setup) |
 | `8077` | The widget page + built file | `npm run example:harness` |
-| `3355` | Optional sample server (real or fake) | `node server.js` (add `MOCK_UPSTREAM=1` for fake) |
 | `8080` | Only for `index.html` | `npm run serve` |
 
 ---
