@@ -30,13 +30,12 @@ jobs:
         env:
           # Three URLs x two shippable environments. `development` is not baked —
           # it points at the developer's machine (see src/buildConfig.ts).
-          STAGING_ADDRESSIQ_API_URL: ${{ vars.STAGING_ADDRESSIQ_API_URL }}
-          STAGING_ADDRESSIQ_INGEST_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_URL }}
-          STAGING_ADDRESSIQ_CDN_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_URL }}
-          PROD_ADDRESSIQ_API_URL: ${{ vars.PROD_ADDRESSIQ_API_URL }}
-          PROD_ADDRESSIQ_INGEST_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_URL }}
-          PROD_ADDRESSIQ_CDN_URL: ${{ vars.PROD_ADDRESSIQ_CDN_URL }}
-          GOOGLE_MAPS_SDK_KEY: ${{ secrets.GOOGLE_MAPS_SDK_KEY }}
+          STAGING_ADDRESSIQ_API_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_API_BASE_URL }}
+          STAGING_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_BASE_URL }}
+          STAGING_ADDRESSIQ_CDN_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_BASE_URL }}
+          PROD_ADDRESSIQ_API_BASE_URL: ${{ vars.PROD_ADDRESSIQ_API_BASE_URL }}
+          PROD_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_BASE_URL }}
+          PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
         run: npm run build
       - run: npm test
       - name: Set version from tag + publish

@@ -40,12 +40,12 @@ const entries = artifacts.map((file) => {
 // The `cdn` field is what partners read to build their <script src>, so it must
 // name the host the bundle is actually uploaded to. It used to be hard-coded to
 // production; now it follows the same per-environment variables the bundle is
-// baked with. CDN_BASE_URL (the cdn.yml override) wins, then PROD_ADDRESSIQ_CDN_URL,
+// baked with. CDN_BASE_URL (the cdn.yml override) wins, then PROD_ADDRESSIQ_CDN_BASE_URL,
 // then the safe public default — the identical precedence cdn.yml uses for
 // $CDN_BASE, so its manifest-vs-upload-host guard still holds.
 const cdnBase = (
   process.env.CDN_BASE_URL ||
-  process.env.PROD_ADDRESSIQ_CDN_URL ||
+  process.env.PROD_ADDRESSIQ_CDN_BASE_URL ||
   'https://cdn.addressiqpro.com'
 ).replace(/\/+$/, '');
 

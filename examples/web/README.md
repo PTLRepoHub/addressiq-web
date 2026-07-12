@@ -92,8 +92,8 @@ Bank"); in fake mode, edit `business` in `mock-fixtures.json`.
 ### The map
 The address step shows a real map. You don't supply a Google Maps key. A default
 key is baked into the published bundle at build time from the GitHub secret
-`GOOGLE_MAPS_SDK_KEY` (and the API URL from the `PROD_ADDRESSIQ_API_URL` /
-`STAGING_ADDRESSIQ_API_URL` variables). On
+`GOOGLE_MAPS_SDK_KEY` (and the API URL from the `PROD_ADDRESSIQ_API_BASE_URL` /
+`STAGING_ADDRESSIQ_API_BASE_URL` variables). On
 top of that, the backend can deliver a key via `GET /api/v1/widget/config`,
 alongside the business name and branding — that value wins over the baked-in one,
 so keys rotate without a rebuild. If neither is present (for example in

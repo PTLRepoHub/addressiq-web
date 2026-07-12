@@ -7,9 +7,9 @@
  * string literal sourced from the GitHub environment at build time — three
  * URLs per shippable environment, from the repository variables:
  *
- *   STAGING_ADDRESSIQ_API_URL       PROD_ADDRESSIQ_API_URL
- *   STAGING_ADDRESSIQ_INGEST_URL   PROD_ADDRESSIQ_INGEST_URL
- *   STAGING_ADDRESSIQ_CDN_URL      PROD_ADDRESSIQ_CDN_URL
+ *   STAGING_ADDRESSIQ_API_BASE_URL       PROD_ADDRESSIQ_API_BASE_URL
+ *   STAGING_ADDRESSIQ_INGEST_BASE_URL   PROD_ADDRESSIQ_INGEST_BASE_URL
+ *   STAGING_ADDRESSIQ_CDN_BASE_URL      PROD_ADDRESSIQ_CDN_BASE_URL
  *
  * plus `__GOOGLE_MAPS_SDK_KEY__` from the `GOOGLE_MAPS_SDK_KEY` secret.
  * Integrators never provide any of these values.

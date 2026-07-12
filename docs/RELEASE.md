@@ -105,9 +105,9 @@ Three guards, because a published SRI hash is pinned for a year:
 3. **Read-back verification** — every object is downloaded from the origin after
    upload and re-hashed against `MANIFEST.json`; a mismatch fails the release.
 
-The build bakes in the same six per-environment URLs (`STAGING_ADDRESSIQ_API_URL`,
-`STAGING_ADDRESSIQ_INGEST_URL`, `STAGING_ADDRESSIQ_CDN_URL`, `PROD_ADDRESSIQ_API_URL`,
-`PROD_ADDRESSIQ_INGEST_URL`, `PROD_ADDRESSIQ_CDN_URL`) + `GOOGLE_MAPS_SDK_KEY` as
+The build bakes in the same six per-environment URLs (`STAGING_ADDRESSIQ_API_BASE_URL`,
+`STAGING_ADDRESSIQ_INGEST_BASE_URL`, `STAGING_ADDRESSIQ_CDN_BASE_URL`, `PROD_ADDRESSIQ_API_BASE_URL`,
+`PROD_ADDRESSIQ_INGEST_BASE_URL`, `PROD_ADDRESSIQ_CDN_BASE_URL`) + `GOOGLE_MAPS_SDK_KEY` as
 `release.yml` and `widget-fanout.yml`, so the CDN, npm, and vendored bundles are
 byte-comparable. `workflow_dispatch` defaults to `dry_run: true` (build, hash,
 and check the CDN — upload nothing).
@@ -120,14 +120,14 @@ and check the CDN — upload nothing).
 | Secret | `SPACES_SECRET_ACCESS_KEY` | the paired secret |
 | Var | `SPACES_BUCKET` | Space name, e.g. `addressiq-cdn` |
 | Var | `SPACES_REGION` | e.g. `nyc3` (endpoint is derived: `nyc3.digitaloceanspaces.com`) |
-| Var | `PROD_ADDRESSIQ_CDN_URL` | the production CDN host, e.g. `https://cdn.addressiqpro.com` (also baked into the bundle) |
-| Var | `CDN_BASE_URL` | optional override of the host *this workflow uploads to*; defaults to `PROD_ADDRESSIQ_CDN_URL`, then to `https://cdn.addressiqpro.com` |
+| Var | `PROD_ADDRESSIQ_CDN_BASE_URL` | the production CDN host, e.g. `https://cdn.addressiqpro.com` (also baked into the bundle) |
+| Var | `CDN_BASE_URL` | optional override of the host *this workflow uploads to*; defaults to `PROD_ADDRESSIQ_CDN_BASE_URL`, then to `https://cdn.addressiqpro.com` |
 
 Also required in DigitalOcean, once: create the Space, **enable its CDN**, and
 attach `cdn.addressiqpro.com` as a custom subdomain (Spaces → Settings → CDN,
 with a Let's Encrypt cert), then point the `cdn` CNAME at the Spaces CDN
 endpoint. `scripts/generate-manifest.mjs` resolves the manifest's `cdn` field
-from the same `CDN_BASE_URL` → `PROD_ADDRESSIQ_CDN_URL` → default chain that
+from the same `CDN_BASE_URL` → `PROD_ADDRESSIQ_CDN_BASE_URL` → default chain that
 `cdn.yml` uses for its upload host, and `cdn.yml` still asserts the two agree —
 if they ever disagree it fails fast rather than advertising a URL it isn't
 writing.
