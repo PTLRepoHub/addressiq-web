@@ -7,7 +7,8 @@ The easiest one to start with is **`local.html`**. It passes
 `environment: 'development'`, so the SDK targets your **local AddressIQ backend on
 `http://localhost:3355`** with a seeded test key, and you see the real flow.
 Integrators never pass a URL — the SDK resolves it from `environment`
-(`production`, `sandbox`, or `development`). If you don't have a backend running,
+(`production`, `staging`, or `development`; `sandbox` is a deprecated alias for
+`staging`). If you don't have a backend running,
 you can switch to **fake data** for a fully offline demo — see
 "[Optional: the sample server](#optional-the-sample-server)" below.
 
@@ -91,7 +92,8 @@ Bank"); in fake mode, edit `business` in `mock-fixtures.json`.
 ### The map
 The address step shows a real map. You don't supply a Google Maps key. A default
 key is baked into the published bundle at build time from the GitHub secret
-`GOOGLE_MAPS_SDK_KEY` (and the API URL from the `ADDRESSIQ_API_URL` variable). On
+`GOOGLE_MAPS_SDK_KEY` (and the API URL from the `PROD_ADDRESSIQ_API_URL` /
+`STAGING_ADDRESSIQ_API_URL` variables). On
 top of that, the backend can deliver a key via `GET /api/v1/widget/config`,
 alongside the business name and branding — that value wins over the baked-in one,
 so keys rotate without a rebuild. If neither is present (for example in
@@ -107,7 +109,7 @@ native.)
 ### Which backend it talks to
 The SDK resolves the API URL from `environment` — integrators never pass a URL.
 `local.html` uses `environment: 'development'` (→ `http://localhost:3355`); the
-hosted paths are `environment: 'production'` and `environment: 'sandbox'`. To run
+hosted paths are `environment: 'production'` and `environment: 'staging'`. To run
 against a different local backend, listen on `:3355` (or start the sample server
 there — see below).
 

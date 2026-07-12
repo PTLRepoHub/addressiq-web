@@ -41,9 +41,16 @@ jobs:
         with:
           node-version: "20"
       - run: npm install
-      - name: Build (bakes API URL + Maps key from GH env into the fanned-out bundle)
+      - name: Build (bakes the per-environment URLs + Maps key into the fanned-out bundle)
         env:
-          ADDRESSIQ_API_URL: ${{ vars.ADDRESSIQ_API_URL }}
+          # Identical to release.yml and cdn.yml, so the vendored widget, the npm
+          # bundle and the CDN bundle are baked from the same values.
+          STAGING_ADDRESSIQ_API_URL: ${{ vars.STAGING_ADDRESSIQ_API_URL }}
+          STAGING_ADDRESSIQ_INGEST_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_URL }}
+          STAGING_ADDRESSIQ_CDN_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_URL }}
+          PROD_ADDRESSIQ_API_URL: ${{ vars.PROD_ADDRESSIQ_API_URL }}
+          PROD_ADDRESSIQ_INGEST_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_URL }}
+          PROD_ADDRESSIQ_CDN_URL: ${{ vars.PROD_ADDRESSIQ_CDN_URL }}
           GOOGLE_MAPS_SDK_KEY: ${{ secrets.GOOGLE_MAPS_SDK_KEY }}
         run: npm run build
       - name: Resolve version

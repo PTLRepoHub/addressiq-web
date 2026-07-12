@@ -1,0 +1,276 @@
+name: CDN
+
+# Publishes the built SDK to DigitalOcean Spaces, which fronts
+# cdn.addressiqpro.com — the host rollup.config.mjs and generate-manifest.mjs
+# have always pointed at (`https://cdn.addressiqpro.com/v{x.y.z}/`) but which
+# nothing actually served (RELEASE-ENGINEERING.md §6a). This serves it.
+#
+# Layout is IMMUTABLE and versioned. A release writes exactly one prefix:
+#
+#   cdn.addressiqpro.com/v0.3.0/iqcollect.js       (+ .js.map)
+#   cdn.addressiqpro.com/v0.3.0/index.esm.js       (+ .js.map)
+#   cdn.addressiqpro.com/v0.3.0/index.cjs.js       (+ .js.map)
+#   cdn.addressiqpro.com/v0.3.0/MANIFEST.json
+#
+# Nothing is ever overwritten and there is no `latest/` or `v0/` alias: the
+# whole point of MANIFEST.json is the SHA-384 SRI hashes partners pin with
+# `<script integrity=…>`, and a floating URL cannot be pinned — it would break
+# every pinned consumer on each release. New version ⇒ new prefix. Because
+# objects are immutable they ship `cache-control: max-age=31536000, immutable`
+# and there is no CDN purge step to get wrong.
+#
+# The upload list is read OUT OF MANIFEST.json rather than globbed from dist/,
+# so the bytes on the CDN are exactly the bytes that were hashed. After upload
+# every object is read back from the origin and re-hashed against the manifest;
+# a mismatch fails the release.
+#
+# The build here bakes in the same six per-environment URLs + GOOGLE_MAPS_SDK_KEY
+# as release.yml and widget-fanout.yml, so the CDN bundle is byte-comparable with
+# the npm and vendored copies.
+#
+# Required secrets: SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY
+#                   (DigitalOcean Spaces access key — Spaces keys, NOT a DO API
+#                    token), GOOGLE_MAPS_SDK_KEY
+# Required vars:     SPACES_BUCKET, SPACES_REGION,
+#                    STAGING_ADDRESSIQ_API_URL, STAGING_ADDRESSIQ_INGEST_URL,
+#                    STAGING_ADDRESSIQ_CDN_URL, PROD_ADDRESSIQ_API_URL,
+#                    PROD_ADDRESSIQ_INGEST_URL, PROD_ADDRESSIQ_CDN_URL
+#                   (optional) CDN_BASE_URL — the host THIS workflow uploads to;
+#                    defaults to PROD_ADDRESSIQ_CDN_URL, then to the public default.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build, hash and diff against the CDN, but upload nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # Two releases uploading at once can't corrupt each other (disjoint prefixes),
+  # but serialising keeps the logs and the read-back verification legible.
+  group: cdn-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to Spaces
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.SPACES_REGION }}
+      AWS_EC2_METADATA_DISABLED: "true"
+      BUCKET: ${{ vars.SPACES_BUCKET }}
+      ENDPOINT: https://${{ vars.SPACES_REGION }}.digitaloceanspaces.com
+      # Same precedence scripts/generate-manifest.mjs uses for the manifest's
+      # `cdn` field, so the guard below compares like with like.
+      CDN_BASE: ${{ vars.CDN_BASE_URL || vars.PROD_ADDRESSIQ_CDN_URL || 'https://cdn.addressiqpro.com' }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check required config
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -n "${BUCKET:-}" ] || missing="$missing vars.SPACES_BUCKET"
+          [ -n "${AWS_DEFAULT_REGION:-}" ] || missing="$missing vars.SPACES_REGION"
+          if [ "${{ github.event.inputs.dry_run }}" != "true" ]; then
+            [ -n "${AWS_ACCESS_KEY_ID:-}" ] || missing="$missing secrets.SPACES_ACCESS_KEY_ID"
+            [ -n "${AWS_SECRET_ACCESS_KEY:-}" ] || missing="$missing secrets.SPACES_SECRET_ACCESS_KEY"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error::missing required config:$missing" >&2
+            exit 1
+          fi
+
+      - run: npm install
+
+      - name: Build (bakes the per-environment URLs + Maps key into the CDN bundle)
+        env:
+          STAGING_ADDRESSIQ_API_URL: ${{ vars.STAGING_ADDRESSIQ_API_URL }}
+          STAGING_ADDRESSIQ_INGEST_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_URL }}
+          STAGING_ADDRESSIQ_CDN_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_URL }}
+          PROD_ADDRESSIQ_API_URL: ${{ vars.PROD_ADDRESSIQ_API_URL }}
+          PROD_ADDRESSIQ_INGEST_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_URL }}
+          PROD_ADDRESSIQ_CDN_URL: ${{ vars.PROD_ADDRESSIQ_CDN_URL }}
+          GOOGLE_MAPS_SDK_KEY: ${{ secrets.GOOGLE_MAPS_SDK_KEY }}
+        run: npm run build
+
+      - run: npm test
+
+      # Gate on the ≤65 KB gzipped UMD budget before anything reaches a URL
+      # partners will pin for a year.
+      - run: npm run size-check
+
+      - name: Generate MANIFEST.json (SRI hashes)
+        env:
+          # The manifest's `cdn` field must name the host we upload to; give the
+          # generator the same inputs $CDN_BASE is resolved from.
+          CDN_BASE_URL: ${{ vars.CDN_BASE_URL }}
+          PROD_ADDRESSIQ_CDN_URL: ${{ vars.PROD_ADDRESSIQ_CDN_URL }}
+        run: npm run manifest
+
+      - name: Resolve version
+        id: v
+        run: |
+          set -euo pipefail
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "${{ github.event_name }}" = "release" ]; then
+            V="${GITHUB_REF_NAME#v}"
+            # release-please bumps package.json and mints the tag from it; if
+            # they disagree, the tag was hand-pushed and the manifest's `cdn`
+            # field would point at a prefix we're not writing.
+            if [ "$V" != "$PKG" ]; then
+              echo "::error::tag v$V does not match package.json $PKG — do not hand-push tags (docs/RELEASE.md §2)" >&2
+              exit 1
+            fi
+          else
+            V="$PKG"
+          fi
+          # scripts/generate-manifest.mjs resolves the `cdn` field partners read
+          # to build their <script src> from CDN_BASE_URL / PROD_ADDRESSIQ_CDN_URL —
+          # the same precedence as $CDN_BASE above. This still asserts they
+          # agree: if they don't, the manifest would advertise a URL that serves
+          # different (or no) bytes.
+          MCDN="$(node -p "require('./dist/MANIFEST.json').cdn")"
+          if [ "$MCDN" != "$CDN_BASE/v$V/" ]; then
+            echo "::error::MANIFEST.json advertises $MCDN but this workflow uploads to $CDN_BASE/v$V/ — reconcile scripts/generate-manifest.mjs with vars.CDN_BASE_URL" >&2
+            exit 1
+          fi
+
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "prefix=v$V" >> "$GITHUB_OUTPUT"
+          echo "Publishing v$V to $CDN_BASE/v$V/"
+
+      # Immutability guard. Re-running a release must not silently rewrite a
+      # prefix partners have already pinned an SRI hash against.
+      - name: Refuse to overwrite an existing version
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          PREFIX: ${{ steps.v.outputs.prefix }}
+        run: |
+          set -euo pipefail
+          existing="$(aws s3api list-objects-v2 \
+            --endpoint-url "$ENDPOINT" \
+            --bucket "$BUCKET" \
+            --prefix "$PREFIX/" \
+            --max-items 1 \
+            --query 'length(Contents || `[]`)' --output text)"
+          if [ "$existing" != "0" ]; then
+            echo "::error::$CDN_BASE/$PREFIX/ already exists on the CDN. Versions are immutable — cut a new version rather than overwriting one." >&2
+            exit 1
+          fi
+
+      - name: Upload artifacts
+        env:
+          PREFIX: ${{ steps.v.outputs.prefix }}
+          DRY: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          # Source of truth is MANIFEST.json, not a dist/ glob: we upload
+          # exactly the files that were hashed, so a partner's `integrity=`
+          # can never disagree with the bytes we served.
+          FILES="$(node -p "
+            require('./dist/MANIFEST.json').artifacts.map(a => a.file).join('\n')
+          ")"
+
+          upload() {  # upload <local> <key> <content-type>
+            echo "  $2  ($3)"
+            [ "$DRY" = "true" ] && return 0
+            aws s3 cp "dist/$1" "s3://$BUCKET/$2" \
+              --endpoint-url "$ENDPOINT" \
+              --acl public-read \
+              --content-type "$3" \
+              --cache-control 'public, max-age=31536000, immutable' \
+              --only-show-errors
+          }
+
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            upload "$f" "$PREFIX/$f" "application/javascript; charset=utf-8"
+            # Source maps are not in the manifest (they aren't executable, so
+            # there's nothing to SRI-pin), but DevTools needs them next to the
+            # bundle for the //# sourceMappingURL to resolve.
+            if [ -f "dist/$f.map" ]; then
+              upload "$f.map" "$PREFIX/$f.map" "application/json; charset=utf-8"
+            fi
+          done <<< "$FILES"
+
+          # Manifest last: its presence is the signal that the prefix is complete.
+          upload MANIFEST.json "$PREFIX/MANIFEST.json" "application/json; charset=utf-8"
+
+      # Read the objects back from the origin and re-hash. Catches a truncated
+      # upload, a mangled content-encoding, or a bucket that quietly rejected
+      # the ACL — before partners pin the hash for a year.
+      - name: Verify uploaded bytes against MANIFEST.json
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          PREFIX: ${{ steps.v.outputs.prefix }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/verify
+          aws s3 cp "s3://$BUCKET/$PREFIX/" /tmp/verify/ \
+            --endpoint-url "$ENDPOINT" --recursive --only-show-errors
+
+          node -e '
+            const { createHash } = require("node:crypto");
+            const { readFileSync } = require("node:fs");
+            const local = JSON.parse(readFileSync("dist/MANIFEST.json", "utf8"));
+            const served = JSON.parse(readFileSync("/tmp/verify/MANIFEST.json", "utf8"));
+            let bad = 0;
+            for (const a of local.artifacts) {
+              const buf = readFileSync(`/tmp/verify/${a.file}`);
+              const sha384 = createHash("sha384").update(buf).digest("base64");
+              const ok = sha384 === a.sha384 && buf.byteLength === a.bytes;
+              console.log(`  ${ok ? "ok  " : "BAD "} ${a.file}  ${a.integrity}`);
+              if (!ok) bad++;
+            }
+            if (JSON.stringify(served) !== JSON.stringify(local)) {
+              console.log("  BAD  MANIFEST.json differs from the local one");
+              bad++;
+            }
+            if (bad) {
+              console.error(`::error::${bad} artifact(s) on the CDN do not match MANIFEST.json`);
+              process.exit(1);
+            }
+            console.log(`\nAll ${local.artifacts.length} artifacts verified against their SRI hashes.`);
+          '
+
+      - name: Summary
+        env:
+          PREFIX: ${{ steps.v.outputs.prefix }}
+        run: |
+          set -euo pipefail
+          {
+            if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+              echo "### CDN dry run — nothing uploaded"
+            else
+              echo "### Published to \`$CDN_BASE/$PREFIX/\`"
+            fi
+            echo
+            echo '```html'
+            node -p '
+              const m = require("./dist/MANIFEST.json");
+              const w = m.artifacts.find(a => a.file === "iqcollect.js");
+              `<script src="${m.cdn}iqcollect.js"\n        integrity="${w.integrity}"\n        crossorigin="anonymous"></script>`
+            '
+            echo '```'
+            echo
+            echo "| Artifact | Integrity | Bytes |"
+            echo "|---|---|---|"
+            node -e '
+              for (const a of require("./dist/MANIFEST.json").artifacts)
+                console.log(`| \`${a.file}\` | \`${a.integrity}\` | ${a.bytes} |`);
+            '
+          } >> "$GITHUB_STEP_SUMMARY"
