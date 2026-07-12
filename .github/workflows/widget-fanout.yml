@@ -35,25 +35,32 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      integrity: ${{ steps.v.outputs.integrity }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - run: npm install
-      - name: Build (bakes the per-environment URLs + Maps key into the fanned-out bundle)
+      - name: Build (bakes the per-environment URLs into the fanned-out bundle)
         env:
           # Identical to release.yml and cdn.yml, so the vendored widget, the npm
           # bundle and the CDN bundle are baked from the same values.
-          STAGING_ADDRESSIQ_API_URL: ${{ vars.STAGING_ADDRESSIQ_API_URL }}
-          STAGING_ADDRESSIQ_INGEST_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_URL }}
-          STAGING_ADDRESSIQ_CDN_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_URL }}
-          PROD_ADDRESSIQ_API_URL: ${{ vars.PROD_ADDRESSIQ_API_URL }}
-          PROD_ADDRESSIQ_INGEST_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_URL }}
-          PROD_ADDRESSIQ_CDN_URL: ${{ vars.PROD_ADDRESSIQ_CDN_URL }}
-          GOOGLE_MAPS_SDK_KEY: ${{ secrets.GOOGLE_MAPS_SDK_KEY }}
+          STAGING_ADDRESSIQ_API_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_API_BASE_URL }}
+          STAGING_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_BASE_URL }}
+          STAGING_ADDRESSIQ_CDN_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_BASE_URL }}
+          PROD_ADDRESSIQ_API_BASE_URL: ${{ vars.PROD_ADDRESSIQ_API_BASE_URL }}
+          PROD_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_BASE_URL }}
+          PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
         run: npm run build
-      - name: Resolve version
+      # The SRI hash the SDKs pin their <script integrity="…"> against. Generated
+      # from the SAME dist/ that is vendored and that cdn.yml uploads, so the
+      # bytes on the CDN, the bytes in the SDK bundle, and this hash cannot
+      # disagree — all three come from one build.
+      - name: Generate MANIFEST.json (SRI hashes)
+        run: npm run manifest
+
+      - name: Resolve version + integrity
         id: v
         run: |
           set -euo pipefail
@@ -62,7 +69,12 @@ jobs:
           else
             V="$(node -p "require('./package.json').version")"
           fi
+          INTEGRITY="$(node -p "
+            require('./dist/MANIFEST.json').artifacts.find(a => a.file === 'iqcollect.js').integrity
+          ")"
           echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "integrity=$INTEGRITY" >> "$GITHUB_OUTPUT"
+          echo "v$V  $INTEGRITY"
       - uses: actions/upload-artifact@v4
         with:
           name: iqcollect
@@ -112,6 +124,7 @@ jobs:
         env:
           DEST: ${{ matrix.dest }}
           VERSION: ${{ needs.build.outputs.version }}
+          INTEGRITY: ${{ needs.build.outputs.integrity }}
         run: |
           set -euo pipefail
           test -f "$DEST" || { echo "::error::$DEST missing in ${{ matrix.repo }}" >&2; exit 1; }
@@ -132,6 +145,13 @@ jobs:
             *) cp /tmp/widget/iqcollect.js "$DEST" ;;
           esac
           printf 'v%s\n' "$VERSION" > .widget-version
+          # The SDKs bake these two into their build config and use them to load
+          # https://{cdn}/v{VERSION}/iqcollect.js with <script integrity="…">.
+          # Both describe the SAME bytes just vendored above, so the CDN copy and
+          # the bundled fallback are byte-identical by construction — and an SRI
+          # mismatch at runtime means the CDN was tampered with, not that the two
+          # drifted apart.
+          printf '%s\n' "$INTEGRITY" > .widget-integrity
 
       - name: Anything to do?
         id: diff

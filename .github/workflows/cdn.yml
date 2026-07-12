@@ -24,19 +24,19 @@ name: CDN
 # every object is read back from the origin and re-hashed against the manifest;
 # a mismatch fails the release.
 #
-# The build here bakes in the same six per-environment URLs + GOOGLE_MAPS_SDK_KEY
-# as release.yml and widget-fanout.yml, so the CDN bundle is byte-comparable with
+# The build here bakes in the same six per-environment URLs as release.yml and
+# widget-fanout.yml, so the CDN bundle is byte-comparable with
 # the npm and vendored copies.
 #
 # Required secrets: SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY
 #                   (DigitalOcean Spaces access key — Spaces keys, NOT a DO API
-#                    token), GOOGLE_MAPS_SDK_KEY
+#                    token)
 # Required vars:     SPACES_BUCKET, SPACES_REGION,
-#                    STAGING_ADDRESSIQ_API_URL, STAGING_ADDRESSIQ_INGEST_URL,
-#                    STAGING_ADDRESSIQ_CDN_URL, PROD_ADDRESSIQ_API_URL,
-#                    PROD_ADDRESSIQ_INGEST_URL, PROD_ADDRESSIQ_CDN_URL
+#                    STAGING_ADDRESSIQ_API_BASE_URL, STAGING_ADDRESSIQ_INGEST_BASE_URL,
+#                    STAGING_ADDRESSIQ_CDN_BASE_URL, PROD_ADDRESSIQ_API_BASE_URL,
+#                    PROD_ADDRESSIQ_INGEST_BASE_URL, PROD_ADDRESSIQ_CDN_BASE_URL
 #                   (optional) CDN_BASE_URL — the host THIS workflow uploads to;
-#                    defaults to PROD_ADDRESSIQ_CDN_URL, then to the public default.
+#                    defaults to PROD_ADDRESSIQ_CDN_BASE_URL, then to the public default.
 
 on:
   release:
@@ -70,7 +70,7 @@ jobs:
       ENDPOINT: https://${{ vars.SPACES_REGION }}.digitaloceanspaces.com
       # Same precedence scripts/generate-manifest.mjs uses for the manifest's
       # `cdn` field, so the guard below compares like with like.
-      CDN_BASE: ${{ vars.CDN_BASE_URL || vars.PROD_ADDRESSIQ_CDN_URL || 'https://cdn.addressiqpro.com' }}
+      CDN_BASE: ${{ vars.CDN_BASE_URL || vars.PROD_ADDRESSIQ_CDN_BASE_URL || 'https://cdn.addressiqpro.com' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -97,13 +97,12 @@ jobs:
 
       - name: Build (bakes the per-environment URLs + Maps key into the CDN bundle)
         env:
-          STAGING_ADDRESSIQ_API_URL: ${{ vars.STAGING_ADDRESSIQ_API_URL }}
-          STAGING_ADDRESSIQ_INGEST_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_URL }}
-          STAGING_ADDRESSIQ_CDN_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_URL }}
-          PROD_ADDRESSIQ_API_URL: ${{ vars.PROD_ADDRESSIQ_API_URL }}
-          PROD_ADDRESSIQ_INGEST_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_URL }}
-          PROD_ADDRESSIQ_CDN_URL: ${{ vars.PROD_ADDRESSIQ_CDN_URL }}
-          GOOGLE_MAPS_SDK_KEY: ${{ secrets.GOOGLE_MAPS_SDK_KEY }}
+          STAGING_ADDRESSIQ_API_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_API_BASE_URL }}
+          STAGING_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_BASE_URL }}
+          STAGING_ADDRESSIQ_CDN_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_BASE_URL }}
+          PROD_ADDRESSIQ_API_BASE_URL: ${{ vars.PROD_ADDRESSIQ_API_BASE_URL }}
+          PROD_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_BASE_URL }}
+          PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
         run: npm run build
 
       - run: npm test
@@ -117,7 +116,7 @@ jobs:
           # The manifest's `cdn` field must name the host we upload to; give the
           # generator the same inputs $CDN_BASE is resolved from.
           CDN_BASE_URL: ${{ vars.CDN_BASE_URL }}
-          PROD_ADDRESSIQ_CDN_URL: ${{ vars.PROD_ADDRESSIQ_CDN_URL }}
+          PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
         run: npm run manifest
 
       - name: Resolve version
@@ -138,7 +137,7 @@ jobs:
             V="$PKG"
           fi
           # scripts/generate-manifest.mjs resolves the `cdn` field partners read
-          # to build their <script src> from CDN_BASE_URL / PROD_ADDRESSIQ_CDN_URL —
+          # to build their <script src> from CDN_BASE_URL / PROD_ADDRESSIQ_CDN_BASE_URL —
           # the same precedence as $CDN_BASE above. This still asserts they
           # agree: if they don't, the manifest would advertise a URL that serves
           # different (or no) bytes.
