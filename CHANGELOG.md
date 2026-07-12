@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/PTLRepoHub/addressiq-web/compare/v0.4.0...v0.4.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* bound the Google Maps script load so a blocked request can't blank the widget ([#8](https://github.com/PTLRepoHub/addressiq-web/issues/8)) ([4e6cdb7](https://github.com/PTLRepoHub/addressiq-web/commit/4e6cdb7a3b6b0ea37952487d27dc52497a286383))
+
 ## [0.4.0](https://github.com/PTLRepoHub/addressiq-web/compare/v0.3.0...v0.4.0) (2026-07-12)
 
 
