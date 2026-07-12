@@ -105,9 +105,9 @@ const ENVIRONMENT_URLS: Record<IQCollectEnvironment, EnvironmentUrls> = {
     cdn: BUILD_CONFIG.prodCdnUrl,
   },
   development: {
-    api: 'http://localhost:3355',
-    ingest: 'http://localhost:3355',
-    cdn: 'http://localhost:3355',
+    api: 'http://localhost:4000',
+    ingest: 'http://localhost:4000',
+    cdn: 'http://localhost:4000',
   },
 };
 

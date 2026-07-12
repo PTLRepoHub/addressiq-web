@@ -29,7 +29,7 @@ const externalESM = []; // nothing external — IQCollect is dependency-free.
 // bundle. Consumed via src/buildConfig.ts (which also guards tsc/jest runs).
 //
 // `development` is NOT baked here — it points at the developer's own machine
-// and stays a literal (http://localhost:3355) in src/index.ts.
+// and stays a literal (http://localhost:4000) in src/index.ts.
 const bake = (name, fallback) => {
   // A base URL with a trailing slash concatenates into `//path`; normalise.
   const value = (process.env[name] || fallback).replace(/\/+$/, '');

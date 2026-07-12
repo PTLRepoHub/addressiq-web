@@ -33,6 +33,16 @@ jobs:
   build:
     name: Build widget bundle
     runs-on: ubuntu-latest
+    # GOOGLE_MAPS_SDK_KEY is an environment-scoped secret (see cdn.yml). The
+    # bundle vendored into the four SDKs is a production artifact, so this job
+    # must bind to `production` — otherwise the key resolves to an empty string
+    # and every SDK would ship a widget whose Maps autocomplete silently does
+    # nothing.
+    #
+    # It also keeps this bundle byte-identical to the one cdn.yml uploads on the
+    # same release event, which is what makes the SRI hash written to
+    # `.widget-integrity` below actually match the bytes served by the CDN.
+    environment: production
     outputs:
       version: ${{ steps.v.outputs.version }}
       integrity: ${{ steps.v.outputs.integrity }}

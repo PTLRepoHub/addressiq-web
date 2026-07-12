@@ -49,6 +49,6 @@ describe('environment resolution', () => {
   });
 
   it('keeps `development` a local literal — never baked from CI', () => {
-    expect(resolveEnvironmentUrls('development').api).toBe('http://localhost:3355');
+    expect(resolveEnvironmentUrls('development').api).toBe('http://localhost:4000');
   });
 });

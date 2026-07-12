@@ -48,7 +48,7 @@ export interface IQCollectConfig {
   /**
    * Which environment to target. The SDK resolves the URLs internally —
    * integrators never pass a URL. `development` points at a local backend
-   * (http://localhost:3355); `production`/`staging` auto-resolve to the hosted
+   * (http://localhost:4000); `production`/`staging` auto-resolve to the hosted
    * APIs. `sandbox` is a deprecated alias for `staging`.
    */
   environment?: IQCollectEnvironmentInput;

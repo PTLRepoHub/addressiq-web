@@ -16,7 +16,7 @@
  *
  * `development` is deliberately NOT baked from CI: it points at a backend on
  * the developer's own machine, so it is a local-only concern and stays a
- * literal (http://localhost:3355) in ENVIRONMENT_URLS. Never ship a build
+ * literal (http://localhost:4000) in ENVIRONMENT_URLS. Never ship a build
  * configured for `development`.
  *
  * The fallbacks below are the safe public defaults, so a local `npm run build`
