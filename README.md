@@ -7,9 +7,22 @@
 AddressIQ (form + map pin + consent). Verification is mobile-only — the web SDK
 intentionally exposes no `verify()` surface.
 
-Ships two ways from one source:
+Ships three ways from one source:
 - **npm / bundler** — ESM + CJS, tree-shakeable.
-- **CDN UMD** — `window.AddressIQ.IQCollect` via a `<script>` tag.
+- **CDN UMD** — `window.AddressIQ.IQCollect` via a `<script>` tag, served from
+  **`cdn.addressiqpro.com`** (staging: `cdn-staging.addressiqpro.com`). The layout
+  is immutable and versioned — `https://cdn.addressiqpro.com/v0.5.3/iqcollect.js` —
+  and every artifact is published with an SRI hash in `MANIFEST.json`, so pin it:
+
+  ```html
+  <script src="https://cdn.addressiqpro.com/v0.5.3/iqcollect.js"
+          integrity="sha384-…"   <!-- from /v0.5.3/MANIFEST.json -->
+          crossorigin="anonymous"></script>
+  ```
+- **Vendored into the four native SDKs** (iOS, Android, Flutter, React Native).
+  They load the widget **from the same CDN with the same SRI pin**, and fall back
+  to their vendored copy only if that fetch fails — so the CDN is not a
+  web-partner-only concern. See [`docs/RELEASE.md`](docs/RELEASE.md) §1, §2b.
 
 ## Repository layout
 
@@ -103,19 +116,22 @@ As always, the web SDK is collect-only — it returns a `locationCode`, and
 verification runs on the mobile SDK via `startVerification({ locationCode })`.
 
 The SDK talks to the AddressIQ platform automatically — integrators pass no API
-URL and no Google Maps key (the map key is provisioned at runtime by the
-platform); select the target environment via `environment` (see above).
+URL and no Google Maps key; select the target environment via `environment` (see
+above). The hosts and a default Maps key are **baked into the bundle at build
+time** (`src/buildConfig.ts`), and the backend's `GET /api/v1/widget/config` can
+deliver a Maps key that **overrides** the baked one, so keys rotate without a
+rebuild (`src/flow.ts:111`).
+
+> **The baked Maps key is public.** It is in the CDN bundle and the npm bundle by
+> design and is readable by anyone. Secrecy is not the control — the key is
+> restricted in the Google Cloud Console (HTTP referrer + API restrictions).
 
 ## Release
 
-Push a semver tag to publish to npm (`.github/workflows/release.yml`):
-
-```bash
-git tag v0.1.0 && git push origin v0.1.0
-```
-
-Requires the `NPM_TOKEN` repository secret. Run the workflow manually with
-`dry_run: true` to validate packaging first.
+Releases are fully automated by **release-please** — do **not** tag or
+`npm publish` by hand. Merging the `chore: release X.Y.Z` PR mints the tag, which
+publishes to npm, to the production CDN, and fans the widget out to the four
+native SDKs. See **[`docs/RELEASE.md`](docs/RELEASE.md)**.
 
 ## Contributing
 

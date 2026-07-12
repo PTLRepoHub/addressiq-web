@@ -100,6 +100,12 @@ so keys rotate without a rebuild. If neither is present (for example in
 fake/offline mode), the address step falls back to a plain text box — everything
 else still works.
 
+> The baked-in key is **public** — it ships inside the CDN and npm bundles and
+> anyone can read it. That is fine and intended: the key is restricted in the
+> Google Cloud Console (HTTP referrer + API restrictions), which is the actual
+> control. (The one bundle built *without* it is the Flutter fallback copy, only
+> because pub.dev's credential scanner rejects packages containing an API key.)
+
 ### Fake location vs. your real one
 By default the demo uses a fake location so it just works. Untick **"Fake
 LocationProvider"** on the page to use your browser's real location instead. (On
