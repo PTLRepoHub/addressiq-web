@@ -1,48 +1,70 @@
 name: CDN
 
-# Publishes the built SDK to DigitalOcean Spaces, which fronts
-# cdn.addressiqpro.com — the host rollup.config.mjs and generate-manifest.mjs
-# have always pointed at (`https://cdn.addressiqpro.com/v{x.y.z}/`) but which
-# nothing actually served (RELEASE-ENGINEERING.md §6a). This serves it.
+# Publishes the built SDK to DigitalOcean Spaces — the host rollup.config.mjs and
+# generate-manifest.mjs point at, and which the four native SDKs now load the
+# widget from with an SRI pin (RELEASE-ENGINEERING.md §6d).
 #
-# Layout is IMMUTABLE and versioned. A release writes exactly one prefix:
+# TWO TARGETS, TWO SETS OF CREDENTIALS.
 #
-#   cdn.addressiqpro.com/v0.3.0/iqcollect.js       (+ .js.map)
-#   cdn.addressiqpro.com/v0.3.0/index.esm.js       (+ .js.map)
-#   cdn.addressiqpro.com/v0.3.0/index.cjs.js       (+ .js.map)
-#   cdn.addressiqpro.com/v0.3.0/MANIFEST.json
+#   push to `staging` branch  → staging CDN   (GitHub Environment: staging)
+#   release: published        → production CDN (GitHub Environment: production)
 #
-# Nothing is ever overwritten and there is no `latest/` or `v0/` alias: the
-# whole point of MANIFEST.json is the SHA-384 SRI hashes partners pin with
-# `<script integrity=…>`, and a floating URL cannot be pinned — it would break
-# every pinned consumer on each release. New version ⇒ new prefix. Because
-# objects are immutable they ship `cache-control: max-age=31536000, immutable`
-# and there is no CDN purge step to get wrong.
+# The credentials and bucket come from **GitHub Environments**, not repo-level
+# secrets: a run targeting `staging` can only see the staging Spaces key, so it
+# is not merely *configured* not to write to the prod bucket — it *cannot*.
+# Configure per environment (Settings → Environments):
+#
+#   Secrets: SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY   (DO **Spaces** keys)
+#            GOOGLE_MAPS_SDK_KEY                              (per-environment Maps key)
+#   Vars:    SPACES_BUCKET, SPACES_REGION, CDN_BASE_URL
+#
+# GOOGLE_MAPS_SDK_KEY is environment-scoped, so a staging build bakes the staging
+# Maps key and a production build bakes the production one. NOTE this makes the
+# staging and production bundles NON-identical (different key baked in) — which is
+# fine, because they are uploaded to different CDNs and hashed independently.
+#
+# ⚠ Any OTHER workflow that builds the bundle must therefore bind to an
+# environment too, or the key resolves to an empty string and ships a widget whose
+# Maps autocomplete silently does nothing. `release.yml` (npm) and
+# `widget-fanout.yml` (the bundle vendored into the four SDKs) are both pinned to
+# `environment: production` for exactly this reason.
+#
+# The six `*_ADDRESSIQ_*_BASE_URL` build vars stay at repo level — the bundle bakes
+# BOTH environments' hosts in and switches at runtime.
+#
+# WHY PRODUCTION PUBLISHES ON `release: published` AND NOT A BRANCH PUSH:
+# that same event runs widget-fanout.yml, which writes `.widget-version` +
+# `.widget-integrity` into the four SDK repos from THE SAME BUILD uploaded here.
+# CDN bytes, vendored bytes, and the SRI hash the SDKs pin therefore come from
+# one build and cannot drift. A branch push would decouple them, and an SDK
+# could end up pinning a hash for bytes that were never published.
+#
+# IMMUTABILITY:
+#   production — a version is written ONCE. Re-running against an existing
+#                /v{x.y.z}/ prefix FAILS. Partners pin those bytes for a year.
+#   staging    — overwrite is allowed, so you can iterate on the branch without
+#                bumping the version. See the warning in the overwrite step: if
+#                an SDK staging build has already pinned an SRI hash for that
+#                version, overwriting makes it fail SRI and *silently fall back
+#                to its bundled widget*. Bump the version if you need staging to
+#                genuinely exercise the CDN path.
 #
 # The upload list is read OUT OF MANIFEST.json rather than globbed from dist/,
-# so the bytes on the CDN are exactly the bytes that were hashed. After upload
-# every object is read back from the origin and re-hashed against the manifest;
-# a mismatch fails the release.
-#
-# The build here bakes in the same six per-environment URLs as release.yml and
-# widget-fanout.yml, so the CDN bundle is byte-comparable with
-# the npm and vendored copies.
-#
-# Required secrets: SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY
-#                   (DigitalOcean Spaces access key — Spaces keys, NOT a DO API
-#                    token)
-# Required vars:     SPACES_BUCKET, SPACES_REGION,
-#                    STAGING_ADDRESSIQ_API_BASE_URL, STAGING_ADDRESSIQ_INGEST_BASE_URL,
-#                    STAGING_ADDRESSIQ_CDN_BASE_URL, PROD_ADDRESSIQ_API_BASE_URL,
-#                    PROD_ADDRESSIQ_INGEST_BASE_URL, PROD_ADDRESSIQ_CDN_BASE_URL
-#                   (optional) CDN_BASE_URL — the host THIS workflow uploads to;
-#                    defaults to PROD_ADDRESSIQ_CDN_BASE_URL, then to the public default.
+# so the bytes uploaded are exactly the bytes that were hashed. After upload
+# every object is read back from the origin and re-hashed against the manifest.
 
 on:
   release:
     types: [published]
+  push:
+    branches: [staging]
   workflow_dispatch:
     inputs:
+      target:
+        description: "Which CDN to publish to"
+        type: choice
+        options: [staging, production]
+        default: staging
       dry_run:
         description: "Build, hash and diff against the CDN, but upload nothing"
         type: boolean
@@ -52,25 +74,31 @@ permissions:
   contents: read
 
 concurrency:
-  # Two releases uploading at once can't corrupt each other (disjoint prefixes),
-  # but serialising keeps the logs and the read-back verification legible.
-  group: cdn-publish
+  # Per-target: a staging push must not queue behind a production release.
+  group: cdn-publish-${{ github.event_name == 'release' && 'production' || github.event.inputs.target || 'staging' }}
   cancel-in-progress: false
 
 jobs:
   publish:
-    name: Publish to Spaces
+    name: Publish to Spaces (${{ github.event_name == 'release' && 'production' || github.event.inputs.target || 'staging' }})
     runs-on: ubuntu-latest
+
+    # Binds the job to a GitHub Environment, which is what scopes the Spaces
+    # credentials below. A release always targets production; a branch push
+    # always targets staging; a manual run picks.
+    environment: ${{ github.event_name == 'release' && 'production' || github.event.inputs.target || 'staging' }}
+
     env:
+      TARGET: ${{ github.event_name == 'release' && 'production' || github.event.inputs.target || 'staging' }}
       AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ${{ vars.SPACES_REGION }}
       AWS_EC2_METADATA_DISABLED: "true"
       BUCKET: ${{ vars.SPACES_BUCKET }}
       ENDPOINT: https://${{ vars.SPACES_REGION }}.digitaloceanspaces.com
-      # Same precedence scripts/generate-manifest.mjs uses for the manifest's
-      # `cdn` field, so the guard below compares like with like.
-      CDN_BASE: ${{ vars.CDN_BASE_URL || vars.PROD_ADDRESSIQ_CDN_BASE_URL || 'https://cdn.addressiqpro.com' }}
+      # The host THIS run uploads to — environment-scoped, so it is the staging
+      # CDN on a staging run and the production CDN on a release.
+      CDN_BASE: ${{ vars.CDN_BASE_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -81,15 +109,17 @@ jobs:
       - name: Check required config
         run: |
           set -euo pipefail
+          echo "Target environment: $TARGET"
           missing=""
           [ -n "${BUCKET:-}" ] || missing="$missing vars.SPACES_BUCKET"
           [ -n "${AWS_DEFAULT_REGION:-}" ] || missing="$missing vars.SPACES_REGION"
+          [ -n "${CDN_BASE:-}" ] || missing="$missing vars.CDN_BASE_URL"
           if [ "${{ github.event.inputs.dry_run }}" != "true" ]; then
             [ -n "${AWS_ACCESS_KEY_ID:-}" ] || missing="$missing secrets.SPACES_ACCESS_KEY_ID"
             [ -n "${AWS_SECRET_ACCESS_KEY:-}" ] || missing="$missing secrets.SPACES_SECRET_ACCESS_KEY"
           fi
           if [ -n "$missing" ]; then
-            echo "::error::missing required config:$missing" >&2
+            echo "::error::missing config in the '$TARGET' environment:$missing" >&2
             exit 1
           fi
 
@@ -97,26 +127,27 @@ jobs:
 
       - name: Build (bakes the per-environment URLs + Maps key into the CDN bundle)
         env:
+          # Repo-level: the bundle carries BOTH host sets and switches at runtime,
+          # so this build is identical for staging and production.
           STAGING_ADDRESSIQ_API_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_API_BASE_URL }}
           STAGING_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_BASE_URL }}
           STAGING_ADDRESSIQ_CDN_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_BASE_URL }}
           PROD_ADDRESSIQ_API_BASE_URL: ${{ vars.PROD_ADDRESSIQ_API_BASE_URL }}
           PROD_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_BASE_URL }}
           PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
+          GOOGLE_MAPS_SDK_KEY: ${{ secrets.GOOGLE_MAPS_SDK_KEY }}
         run: npm run build
 
       - run: npm test
 
-      # Gate on the ≤65 KB gzipped UMD budget before anything reaches a URL
-      # partners will pin for a year.
+      # Gate on the ≤65 KB gzipped UMD budget before anything reaches a URL an
+      # SDK will pin an SRI hash against.
       - run: npm run size-check
 
       - name: Generate MANIFEST.json (SRI hashes)
         env:
-          # The manifest's `cdn` field must name the host we upload to; give the
-          # generator the same inputs $CDN_BASE is resolved from.
+          # The manifest's `cdn` field must name the host THIS run uploads to.
           CDN_BASE_URL: ${{ vars.CDN_BASE_URL }}
-          PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
         run: npm run manifest
 
       - name: Resolve version
@@ -126,9 +157,9 @@ jobs:
           PKG="$(node -p "require('./package.json').version")"
           if [ "${{ github.event_name }}" = "release" ]; then
             V="${GITHUB_REF_NAME#v}"
-            # release-please bumps package.json and mints the tag from it; if
-            # they disagree, the tag was hand-pushed and the manifest's `cdn`
-            # field would point at a prefix we're not writing.
+            # release-please bumps package.json and mints the tag from it; if they
+            # disagree the tag was hand-pushed, and the manifest's `cdn` field
+            # would point at a prefix we are not writing.
             if [ "$V" != "$PKG" ]; then
               echo "::error::tag v$V does not match package.json $PKG — do not hand-push tags (docs/RELEASE.md §2)" >&2
               exit 1
@@ -136,24 +167,25 @@ jobs:
           else
             V="$PKG"
           fi
-          # scripts/generate-manifest.mjs resolves the `cdn` field partners read
-          # to build their <script src> from CDN_BASE_URL / PROD_ADDRESSIQ_CDN_BASE_URL —
-          # the same precedence as $CDN_BASE above. This still asserts they
-          # agree: if they don't, the manifest would advertise a URL that serves
-          # different (or no) bytes.
+
+          # generate-manifest.mjs resolves `cdn` from CDN_BASE_URL — the same var
+          # $CDN_BASE comes from. Assert they agree: otherwise the manifest would
+          # advertise a URL that serves different (or no) bytes.
           MCDN="$(node -p "require('./dist/MANIFEST.json').cdn")"
           if [ "$MCDN" != "$CDN_BASE/v$V/" ]; then
-            echo "::error::MANIFEST.json advertises $MCDN but this workflow uploads to $CDN_BASE/v$V/ — reconcile scripts/generate-manifest.mjs with vars.CDN_BASE_URL" >&2
+            echo "::error::MANIFEST.json advertises $MCDN but this run uploads to $CDN_BASE/v$V/ — check vars.CDN_BASE_URL in the '$TARGET' environment" >&2
             exit 1
           fi
 
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "prefix=v$V" >> "$GITHUB_OUTPUT"
-          echo "Publishing v$V to $CDN_BASE/v$V/"
+          echo "Publishing v$V to $CDN_BASE/v$V/  [$TARGET]"
 
-      # Immutability guard. Re-running a release must not silently rewrite a
-      # prefix partners have already pinned an SRI hash against.
-      - name: Refuse to overwrite an existing version
+      # Production is write-once: partners (and the SDKs' SRI pins) depend on
+      # those bytes never changing. Staging may overwrite so the branch can be
+      # iterated on — but say so loudly, because overwriting a version an SDK
+      # build has already pinned makes it fail SRI and fall back to its bundle.
+      - name: Overwrite policy
         if: github.event.inputs.dry_run != 'true'
         env:
           PREFIX: ${{ steps.v.outputs.prefix }}
@@ -165,10 +197,18 @@ jobs:
             --prefix "$PREFIX/" \
             --max-items 1 \
             --query 'length(Contents || `[]`)' --output text)"
-          if [ "$existing" != "0" ]; then
-            echo "::error::$CDN_BASE/$PREFIX/ already exists on the CDN. Versions are immutable — cut a new version rather than overwriting one." >&2
+
+          if [ "$existing" = "0" ]; then
+            echo "$CDN_BASE/$PREFIX/ is empty — publishing a new version."
+            exit 0
+          fi
+
+          if [ "$TARGET" = "production" ]; then
+            echo "::error::$CDN_BASE/$PREFIX/ already exists. Production versions are immutable — partners and the SDKs' SRI pins depend on these bytes. Cut a new version rather than overwriting one." >&2
             exit 1
           fi
+
+          echo "::warning::Overwriting $CDN_BASE/$PREFIX/ on staging. Any SDK staging build that already pinned an SRI hash for v${{ steps.v.outputs.version }} will now FAIL the integrity check and silently fall back to its bundled widget. Bump the version if you need staging to exercise the CDN path."
 
       - name: Upload artifacts
         env:
@@ -177,8 +217,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Source of truth is MANIFEST.json, not a dist/ glob: we upload
-          # exactly the files that were hashed, so a partner's `integrity=`
+          # Source of truth is MANIFEST.json, not a dist/ glob: we upload exactly
+          # the files that were hashed, so an SDK's `integrity=` (and a partner's)
           # can never disagree with the bytes we served.
           FILES="$(node -p "
             require('./dist/MANIFEST.json').artifacts.map(a => a.file).join('\n')
@@ -198,20 +238,19 @@ jobs:
           while IFS= read -r f; do
             [ -n "$f" ] || continue
             upload "$f" "$PREFIX/$f" "application/javascript; charset=utf-8"
-            # Source maps are not in the manifest (they aren't executable, so
-            # there's nothing to SRI-pin), but DevTools needs them next to the
-            # bundle for the //# sourceMappingURL to resolve.
+            # Source maps aren't in the manifest (not executable, nothing to
+            # SRI-pin), but DevTools needs them beside the bundle.
             if [ -f "dist/$f.map" ]; then
               upload "$f.map" "$PREFIX/$f.map" "application/json; charset=utf-8"
             fi
           done <<< "$FILES"
 
-          # Manifest last: its presence is the signal that the prefix is complete.
+          # Manifest last: its presence signals the prefix is complete.
           upload MANIFEST.json "$PREFIX/MANIFEST.json" "application/json; charset=utf-8"
 
       # Read the objects back from the origin and re-hash. Catches a truncated
-      # upload, a mangled content-encoding, or a bucket that quietly rejected
-      # the ACL — before partners pin the hash for a year.
+      # upload, a mangled content-encoding, or a bucket that quietly rejected the
+      # ACL — before an SDK pins the hash.
       - name: Verify uploaded bytes against MANIFEST.json
         if: github.event.inputs.dry_run != 'true'
         env:
@@ -253,9 +292,9 @@ jobs:
           set -euo pipefail
           {
             if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-              echo "### CDN dry run — nothing uploaded"
+              echo "### CDN dry run ($TARGET) — nothing uploaded"
             else
-              echo "### Published to \`$CDN_BASE/$PREFIX/\`"
+              echo "### Published to \`$CDN_BASE/$PREFIX/\` ($TARGET)"
             fi
             echo
             echo '```html'

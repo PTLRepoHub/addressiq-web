@@ -49,12 +49,12 @@ for local work run the demo proxy in **mock mode** and open the dev harness:
 ```bash
 # 1. Mock upstream — serves canned /api/v1/* (session, list, start-verify, collect)
 cd ../addressiq-node-backend
-MOCK_UPSTREAM=1 PORT=3355 node server.js
+MOCK_UPSTREAM=1 PORT=4000 node server.js
 
 # 2. Build the widget, then open the harness in a browser
 cd ../addressiq-web
 npm run build
-open examples/web/local.html        # loads dist/iqcollect.js against http://localhost:3355
+open examples/web/local.html        # loads dist/iqcollect.js against http://localhost:4000
 ```
 
 - **Toggle the two address-book branches** by editing `hasSavedAddresses` in
