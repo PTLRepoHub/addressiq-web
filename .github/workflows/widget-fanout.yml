@@ -52,7 +52,7 @@ jobs:
         with:
           node-version: "20"
       - run: npm install
-      - name: Build (bakes the per-environment URLs into the fanned-out bundle)
+      - name: Build (bakes the per-environment URLs + Maps key into the fanned-out bundle)
         env:
           # Identical to release.yml and cdn.yml, so the vendored widget, the npm
           # bundle and the CDN bundle are baked from the same values.
@@ -62,7 +62,13 @@ jobs:
           PROD_ADDRESSIQ_API_BASE_URL: ${{ vars.PROD_ADDRESSIQ_API_BASE_URL }}
           PROD_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_BASE_URL }}
           PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
+          GOOGLE_MAPS_SDK_KEY: ${{ secrets.GOOGLE_MAPS_SDK_KEY }}
         run: npm run build
+
+      # A missing build secret produces a VALID build with an empty key — nothing
+      # fails, nothing warns. npm v0.5.0 shipped exactly that. Assert on the BYTES.
+      - name: Verify the baked config (Maps key present, no placeholders)
+        run: npm run check-config
       # The SRI hash the SDKs pin their <script integrity="…"> against. Generated
       # from the SAME dist/ that is vendored and that cdn.yml uploads, so the
       # bytes on the CDN, the bytes in the SDK bundle, and this hash cannot

@@ -27,7 +27,8 @@
     "size-check": "node scripts/check-size.mjs",
     "manifest": "node scripts/generate-manifest.mjs",
     "example": "npm run build && npm --prefix examples/web install && npm --prefix examples/web run serve",
-    "example:harness": "npm run build && npx --yes http-server . -p 8077 -c-1 -o /examples/web/local.html"
+    "example:harness": "npm run build && npx --yes http-server . -p 8077 -c-1 -o /examples/web/local.html",
+    "check-config": "node scripts/check-baked-config.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.2.3",
