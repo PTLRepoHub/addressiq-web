@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/PTLRepoHub/addressiq-web/compare/v0.4.2...v0.5.0) (2026-07-12)
+
+
+### Features
+
+* per-environment build config and two-environment CDN publish ([#12](https://github.com/PTLRepoHub/addressiq-web/issues/12)) ([05d7a91](https://github.com/PTLRepoHub/addressiq-web/commit/05d7a91acd78fca48b498d7d43882219719780bb))
+
 ## [0.4.2](https://github.com/PTLRepoHub/addressiq-web/compare/v0.4.1...v0.4.2) (2026-07-12)
 
 
