@@ -138,6 +138,11 @@ jobs:
           GOOGLE_MAPS_SDK_KEY: ${{ secrets.GOOGLE_MAPS_SDK_KEY }}
         run: npm run build
 
+      # A missing build secret produces a VALID build with an empty key — nothing
+      # fails, nothing warns. npm v0.5.0 shipped exactly that. Assert on the BYTES.
+      - name: Verify the baked config (Maps key present, no placeholders)
+        run: npm run check-config
+
       - run: npm test
 
       # Gate on the ≤65 KB gzipped UMD budget before anything reaches a URL an
