@@ -65,13 +65,16 @@ export interface IQCollectConfig {
    *
    * The key is normally *platform-provisioned*: the widget fetches one from
    * `GET /api/v1/widget/config` and falls back to the key baked into this bundle.
-   * Integrators never pass a Maps key, and this is not a partner-facing knob —
-   * it exists for the case that breaks, a local backend with no key configured,
-   * and for the native SDKs' `ADDRESSIQ_DEV_GOOGLE_MAPS_KEY` override, which
-   * arrives through this field.
+   * Integrators never pass a Maps key, and this is not a partner-facing knob — it
+   * exists for the one case that breaks: a local backend with no key configured.
    *
    * When set it takes precedence over both the remote value and the baked one:
    * it is useful precisely when the backend cannot supply a key.
+   *
+   * This is the ONLY SDK with a Maps-key override, and deliberately so — the key
+   * is consumed here, by this bundle, which builds the `maps.googleapis.com`
+   * script tag (`collect-form.ts`). The native SDKs merely host this widget in a
+   * WebView and never touch a key.
    */
   googleMapsApiKey?: string;
   appUserId: string;
