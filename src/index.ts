@@ -103,9 +103,12 @@ const DEPLOYMENT_URLS: Record<IQCollectDeployment, DeploymentUrls> = {
     cdn: BUILD_CONFIG.prodCdnUrl,
   },
   development: {
-    api: 'http://localhost:4000',
-    ingest: 'http://localhost:4000',
-    cdn: 'http://localhost:4000',
+    // Defaults to localhost:4000; overridable from ADDRESSIQ_DEV_* at build time
+    // (see .env.example) so a build can point at a LAN IP or a colleague's
+    // backend. Development-only — nothing else reads these.
+    api: BUILD_CONFIG.devApiUrl,
+    ingest: BUILD_CONFIG.devIngestUrl,
+    cdn: BUILD_CONFIG.devCdnUrl,
   },
 };
 
@@ -135,6 +138,33 @@ export function resolveDeploymentUrls(
     );
   }
   return urls;
+}
+
+/**
+ * Refuse a caller-supplied Maps key on anything but `development`.
+ *
+ * The key is *platform-provisioned*: the widget fetches one from
+ * `GET /api/v1/widget/config` and falls back to the key baked into this bundle.
+ * A caller-supplied key is a development-only escape hatch for a local backend
+ * that has no key configured — and it must not become a partner-facing knob, so
+ * it fails loudly rather than being silently ignored on a shipped build.
+ *
+ * Pure and exported so it can be tested without a DOM (this module's constructor
+ * needs `window`).
+ */
+export function assertDevOnlyMapsKey(
+  deployment: IQCollectDeployment | undefined,
+  googleMapsApiKey: string | undefined,
+): void {
+  if (!googleMapsApiKey) return;
+  const effective = deployment ?? 'production';
+  if (effective !== 'development') {
+    throw new Error(
+      `IQCollect: googleMapsApiKey is a development-only override, but deployment is ` +
+        `"${effective}". The Maps key is provisioned by the platform — the widget fetches ` +
+        `one from GET /api/v1/widget/config. Drop the field, or set deployment: 'development'.`,
+    );
+  }
 }
 
 /**
@@ -176,6 +206,9 @@ export class IQCollect {
     // never a URL). Defaults to production.
     this.urls = resolveDeploymentUrls(config.deployment);
     this.apiUrl = this.urls.api;
+
+    assertDevOnlyMapsKey(config.deployment, config.googleMapsApiKey);
+
     this.config = config;
     this.mount = mount;
     // In a native webview the shell owns the Always/Precise prompt + fix.
@@ -195,6 +228,8 @@ export class IQCollect {
       theme: this.config.theme,
       platform: this.config.platform,
       locationProvider: this.locationProvider,
+      // Development-only; the constructor has already refused it on a shipped build.
+      googleMapsApiKey: this.config.googleMapsApiKey,
       loadConfig: () => this.fetchWidgetConfig(),
       listAddresses: () => this.listAddresses(),
       fetchCountries: () => this.fetchCountries(),

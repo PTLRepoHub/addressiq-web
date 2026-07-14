@@ -59,6 +59,21 @@ export interface IQCollectConfig {
    * hosted APIs. An unrecognised value throws; `'sandbox'` is not a deployment.
    */
   deployment?: IQCollectDeployment;
+  /**
+   * Google Maps JS key. **Development only** — supplying it with any other
+   * `deployment` throws.
+   *
+   * The key is normally *platform-provisioned*: the widget fetches one from
+   * `GET /api/v1/widget/config` and falls back to the key baked into this bundle.
+   * Integrators never pass a Maps key, and this is not a partner-facing knob —
+   * it exists for the case that breaks, a local backend with no key configured,
+   * and for the native SDKs' `ADDRESSIQ_DEV_GOOGLE_MAPS_KEY` override, which
+   * arrives through this field.
+   *
+   * When set it takes precedence over both the remote value and the baked one:
+   * it is useful precisely when the backend cannot supply a key.
+   */
+  googleMapsApiKey?: string;
   appUserId: string;
   /** Per-business branding for the intro + collaboration + consent screens. */
   business?: BusinessBranding;

@@ -7,6 +7,7 @@ import {
   IQCollect,
   verify,
   resolveDeploymentUrls,
+  assertDevOnlyMapsKey,
   BROWSER_VERIFICATION_NOT_SUPPORTED_ERROR,
 } from '../src';
 
@@ -60,5 +61,27 @@ describe('deployment resolution', () => {
 
   it('keeps `development` a local literal — never baked from CI', () => {
     expect(resolveDeploymentUrls('development').api).toBe('http://localhost:4000');
+  });
+});
+
+describe('development-only Maps key override', () => {
+  it('is refused on a shipped deployment', () => {
+    // The Maps key is platform-provisioned (fetched from /api/v1/widget/config).
+    // A caller-supplied one must not become a partner-facing knob, so it fails
+    // loudly rather than being silently ignored.
+    expect(() => assertDevOnlyMapsKey('production', 'AIzaDEV')).toThrow(/development-only/);
+    expect(() => assertDevOnlyMapsKey('staging', 'AIzaDEV')).toThrow(/development-only/);
+    // deployment omitted -> defaults to production
+    expect(() => assertDevOnlyMapsKey(undefined, 'AIzaDEV')).toThrow(/development-only/);
+  });
+
+  it('is accepted in development', () => {
+    expect(() => assertDevOnlyMapsKey('development', 'AIzaDEV')).not.toThrow();
+  });
+
+  it('a shipped build that does not set it is unaffected', () => {
+    // The throw must fire only when someone actually supplies a key.
+    expect(() => assertDevOnlyMapsKey('production', undefined)).not.toThrow();
+    expect(() => assertDevOnlyMapsKey('production', '')).not.toThrow();
   });
 });

@@ -8,10 +8,20 @@
 // The UMD build is minified + tree-shaken. CI enforces a ≤65 KB gzipped
 // budget on the UMD output (see scripts/check-size.mjs).
 
+import fs from 'node:fs';
 import resolve from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
 import terser from '@rollup/plugin-terser';
 import replace from '@rollup/plugin-replace';
+
+// Load .env (gitignored) into process.env for LOCAL builds, without adding a
+// dependency. Real env vars always win, so CI — which sets the STAGING_*/PROD_*
+// repository variables directly — is unaffected: a .env file does not exist there.
+// Only ADDRESSIQ_DEV_* is expected here; see .env.example.
+for (const line of fs.existsSync('.env') ? fs.readFileSync('.env', 'utf8').split('\n') : []) {
+  const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
+  if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+}
 
 const externalESM = []; // nothing external — IQCollect is dependency-free.
 
@@ -65,6 +75,15 @@ const buildReplace = () =>
       ),
       __ADDRESSIQ_PROD_CDN_URL__: bake('PROD_ADDRESSIQ_CDN_BASE_URL', 'https://cdn.addressiqpro.com'),
       __GOOGLE_MAPS_SDK_KEY__: JSON.stringify(process.env.GOOGLE_MAPS_SDK_KEY || ''),
+
+      // Development-only host overrides (see .env.example). NOTE the DEV_ prefix:
+      // the unprefixed ADDRESSIQ_API_URL above is the LEGACY name for the
+      // PRODUCTION api host, so a dev override must never reuse it — a LAN IP
+      // would be baked in as production, and it is a valid URL so
+      // check-baked-config.mjs would not catch it.
+      __ADDRESSIQ_DEV_API_URL__: bake('ADDRESSIQ_DEV_API_URL', 'http://localhost:4000'),
+      __ADDRESSIQ_DEV_INGEST_URL__: bake('ADDRESSIQ_DEV_INGEST_URL', 'http://localhost:4000'),
+      __ADDRESSIQ_DEV_CDN_URL__: bake('ADDRESSIQ_DEV_CDN_URL', 'http://localhost:4000'),
     },
   });
 

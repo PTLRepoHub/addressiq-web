@@ -33,6 +33,18 @@ declare const __ADDRESSIQ_PROD_INGEST_URL__: string | undefined;
 declare const __ADDRESSIQ_PROD_CDN_URL__: string | undefined;
 declare const __GOOGLE_MAPS_SDK_KEY__: string | undefined;
 
+// Development-only overrides, injected from ADDRESSIQ_DEV_* (see .env.example).
+// The `development` hosts were previously hardcoded to localhost:4000 with no way
+// to change them. Honoured ONLY when `deployment: 'development'` — resolveDeploymentUrls
+// throws if one is set on a staging or production build.
+//
+// The DEV_ prefix is load-bearing: the *unprefixed* ADDRESSIQ_API_URL is already
+// the legacy name for the PRODUCTION api host in rollup.config.mjs, so reusing it
+// would let a developer's LAN IP get baked in as production.
+declare const __ADDRESSIQ_DEV_API_URL__: string | undefined;
+declare const __ADDRESSIQ_DEV_INGEST_URL__: string | undefined;
+declare const __ADDRESSIQ_DEV_CDN_URL__: string | undefined;
+
 export const BUILD_CONFIG = {
   /** Staging hosts. Rollup injects the GH `STAGING_*_BASE_URL` variables. */
   stagingApiUrl:
@@ -67,4 +79,22 @@ export const BUILD_CONFIG = {
     typeof __GOOGLE_MAPS_SDK_KEY__ !== 'undefined' && __GOOGLE_MAPS_SDK_KEY__
       ? __GOOGLE_MAPS_SDK_KEY__
       : '',
+
+  /**
+   * Development hosts. Default to localhost:4000; overridable from
+   * ADDRESSIQ_DEV_* so a build can point at a LAN IP or a colleague's backend.
+   * Development-only by construction — nothing else reads these.
+   */
+  devApiUrl:
+    typeof __ADDRESSIQ_DEV_API_URL__ !== 'undefined' && __ADDRESSIQ_DEV_API_URL__
+      ? __ADDRESSIQ_DEV_API_URL__
+      : 'http://localhost:4000',
+  devIngestUrl:
+    typeof __ADDRESSIQ_DEV_INGEST_URL__ !== 'undefined' && __ADDRESSIQ_DEV_INGEST_URL__
+      ? __ADDRESSIQ_DEV_INGEST_URL__
+      : 'http://localhost:4000',
+  devCdnUrl:
+    typeof __ADDRESSIQ_DEV_CDN_URL__ !== 'undefined' && __ADDRESSIQ_DEV_CDN_URL__
+      ? __ADDRESSIQ_DEV_CDN_URL__
+      : 'http://localhost:4000',
 } as const;
