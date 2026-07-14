@@ -17,8 +17,7 @@
 
 export type {
   IQCollectConfig,
-  IQCollectEnvironment,
-  IQCollectEnvironmentInput,
+  IQCollectDeployment,
   AddressData,
   IQCollectError,
   BusinessBranding,
@@ -29,8 +28,7 @@ export type { LocationProvider, LocationFix } from './location-provider';
 
 import type {
   IQCollectConfig,
-  IQCollectEnvironment,
-  IQCollectEnvironmentInput,
+  IQCollectDeployment,
   AddressData,
   IQCollectError,
   SavedAddress,
@@ -69,23 +67,23 @@ function writeRefCache(key: string, data: unknown): void {
   }
 }
 
-/** The three URLs the SDK resolves for a given environment. */
-export interface EnvironmentUrls {
+/** The three URLs the SDK resolves for a given deployment. */
+export interface DeploymentUrls {
   /** Public API host — every request the SDK makes today goes here. */
   api: string;
   /**
    * Transit-event ingestion host. The web SDK is collect-only and sends no
    * transit events, so nothing here fetches from it; it is resolved and exposed
-   * so hosts (and the mobile SDKs, which do ingest) agree on one per-environment
+   * so hosts (and the mobile SDKs, which do ingest) agree on one per-deployment
    * host across the fleet.
    */
   ingest: string;
-  /** CDN host the UMD bundle is published to for this environment. */
+  /** CDN host the UMD bundle is published to for this deployment. */
   cdn: string;
 }
 
 /**
- * URLs per environment. Integrators pass `environment`, not a URL.
+ * URLs per deployment. Integrators pass `deployment`, not a URL.
  *
  * `staging` and `production` are baked in at build time from the
  * `STAGING_*` / `PROD_*` GitHub variables (see buildConfig.ts). `development`
@@ -93,7 +91,7 @@ export interface EnvironmentUrls {
  * machine, so it stays a literal. Never ship a build configured for
  * `development`.
  */
-const ENVIRONMENT_URLS: Record<IQCollectEnvironment, EnvironmentUrls> = {
+const DEPLOYMENT_URLS: Record<IQCollectDeployment, DeploymentUrls> = {
   staging: {
     api: BUILD_CONFIG.stagingApiUrl,
     ingest: BUILD_CONFIG.stagingIngestUrl,
@@ -112,15 +110,31 @@ const ENVIRONMENT_URLS: Record<IQCollectEnvironment, EnvironmentUrls> = {
 };
 
 /**
- * Resolve the api/ingest/cdn hosts for an environment.
+ * Resolve the api/ingest/cdn hosts for a deployment.
  *
- * `sandbox` is the former name for `staging`, retained so existing integrators
- * keep working; it resolves identically.
+ * Throws on an unrecognised value rather than returning `undefined` hosts. This
+ * bundle ships as a UMD loaded from a `<script>` tag, so most callers are plain
+ * JS with no type checking — a typo (or the now-removed `'sandbox'`) would
+ * otherwise index the record to `undefined` and fail later, far from the cause.
  */
-export function resolveEnvironmentUrls(
-  environment: IQCollectEnvironmentInput = 'production',
-): EnvironmentUrls {
-  return ENVIRONMENT_URLS[environment === 'sandbox' ? 'staging' : environment];
+export function resolveDeploymentUrls(
+  deployment: IQCollectDeployment = 'production',
+): DeploymentUrls {
+  const urls = DEPLOYMENT_URLS[deployment];
+  if (!urls) {
+    const hint =
+      (deployment as string) === 'sandbox'
+        ? ' "sandbox" is not a deployment — it is a tenant mode, chosen by the API key' +
+          ' you paste (aiq_test_… for sandbox, aiq_live_… for production), not by this' +
+          ' field. If you meant the pre-production hosts, use "staging"; otherwise drop' +
+          ' this field and use a sandbox key.'
+        : '';
+    throw new Error(
+      `AddressIQ: unknown deployment "${deployment}". Expected one of ` +
+        `${Object.keys(DEPLOYMENT_URLS).join(', ')}.${hint}`,
+    );
+  }
+  return urls;
 }
 
 /**
@@ -133,15 +147,15 @@ export function resolveEnvironmentUrls(
  */
 export class IQCollect {
   private readonly config: IQCollectConfig;
-  /** API base URL resolved from `config.environment`. */
+  /** API base URL resolved from `config.deployment`. */
   private readonly apiUrl: string;
   /**
-   * Ingest + CDN hosts resolved from `config.environment`, exposed so hosts can
+   * Ingest + CDN hosts resolved from `config.deployment`, exposed so hosts can
    * read the same values the bundle was baked with. Nothing in this SDK fetches
    * from either: the web SDK sends no transit events, and the widget is the CDN
    * bundle rather than a fetcher of it.
    */
-  readonly urls: EnvironmentUrls;
+  readonly urls: DeploymentUrls;
   private readonly mount: HTMLElement;
   private readonly bridge: HostBridge | null;
   private readonly locationProvider: LocationProvider;
@@ -158,9 +172,9 @@ export class IQCollect {
     if (!config.apiKey) throw new Error('IQCollect: apiKey is required');
     if (!config.appUserId) throw new Error('IQCollect: appUserId is required');
 
-    // Resolve the URLs purely from `environment` (integrators pass an enum,
+    // Resolve the URLs purely from `deployment` (integrators pass an enum,
     // never a URL). Defaults to production.
-    this.urls = resolveEnvironmentUrls(config.environment);
+    this.urls = resolveDeploymentUrls(config.deployment);
     this.apiUrl = this.urls.api;
     this.config = config;
     this.mount = mount;

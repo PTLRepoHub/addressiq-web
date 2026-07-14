@@ -24,7 +24,7 @@
     </div>
     <p style="font-size:13px;color:#6b7280;margin-top:0">
         Backend: <code id="api"></code> — the SDK resolves the URL from
-        <code>environment: 'development'</code>, which targets your local AddressIQ
+        <code>deployment: 'development'</code>, which targets your local AddressIQ
         backend on <code>:4000</code> (dev CORS allows this). Override the key or
         maps key with <code>?key=</code>, <code>?gmaps=</code>.
     </p>
@@ -36,9 +36,9 @@
 <script src="../../dist/iqcollect.js"></script>
 <script>
     const params = new URLSearchParams(location.search);
-    // The SDK resolves the URL from `environment` — `development` targets the
+    // The SDK resolves the URL from `deployment` — `development` targets the
     // local backend on http://localhost:4000 (dev CORS allows all origins).
-    const API_URL = 'http://localhost:4000 (environment: development)';
+    const API_URL = 'http://localhost:4000 (deployment: development)';
     // Seeded test tenant key (Demo Bank sandbox). Override with ?key=.
     const API_KEY = params.get('key') || 'aiq_test_demo_bank_seed01';
     document.getElementById('api').textContent = API_URL;
@@ -63,7 +63,7 @@
             document.getElementById('iqcollect-mount'),
             {
                 apiKey: API_KEY,
-                environment: 'development',
+                deployment: 'development',
                 appUserId: 'cust_local_001',
                 // No business config passed — the widget fetches the business
                 // name/logo/colour from the backend (tenant behind the API key).

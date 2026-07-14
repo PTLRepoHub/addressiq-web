@@ -29,29 +29,36 @@ export interface SavedAddress {
 }
 
 /**
- * Canonical environment names. `staging` is the pre-production environment —
- * named `staging` across all AddressIQ SDKs and matching the `STAGING_*` build
- * variables. `development` points at a backend on the developer's own machine.
- */
-export type IQCollectEnvironment = 'staging' | 'production' | 'development';
-
-/**
- * What an integrator may pass. `sandbox` is the former name for `staging`,
- * retained so existing integrators keep working; it resolves identically.
+ * Which AddressIQ DEPLOYMENT to talk to — i.e. which hosts. `staging` is the
+ * pre-production deployment, named `staging` across all AddressIQ SDKs and
+ * matching the `STAGING_*` build variables. `development` points at a backend on
+ * the developer's own machine.
  *
- * @deprecated `'sandbox'` — use `'staging'`.
+ * This is NOT the tenant's mode. Sandbox-vs-production is a property of the API
+ * KEY (`aiq_test_…` resolves to a sandbox tenant server-side, `aiq_live_…` to a
+ * production one) and is decided entirely by the backend — the SDK neither sends
+ * it nor can influence it. The axes are orthogonal: a test key against the
+ * production deployment is still sandbox.
+ *
+ * `'sandbox'` was previously accepted here as an alias for `'staging'`, which
+ * asserted that sandbox was a deployment. It is not, and it is now rejected.
  */
-export type IQCollectEnvironmentInput = IQCollectEnvironment | 'sandbox';
+export type IQCollectDeployment = 'staging' | 'production' | 'development';
 
 export interface IQCollectConfig {
+  /**
+   * Tenant API key. This — not `deployment` — decides whether the tenant is in
+   * sandbox or production mode: `aiq_test_…` resolves to a sandbox App row
+   * server-side, `aiq_live_…` to a production one.
+   */
   apiKey: string;
   /**
-   * Which environment to target. The SDK resolves the URLs internally —
-   * integrators never pass a URL. `development` points at a local backend
-   * (http://localhost:4000); `production`/`staging` auto-resolve to the hosted
-   * APIs. `sandbox` is a deprecated alias for `staging`.
+   * Which DEPLOYMENT (i.e. which hosts) to target. The SDK resolves the URLs
+   * internally — integrators never pass a URL. `development` points at a local
+   * backend (http://localhost:4000); `production`/`staging` auto-resolve to the
+   * hosted APIs. An unrecognised value throws; `'sandbox'` is not a deployment.
    */
-  environment?: IQCollectEnvironmentInput;
+  deployment?: IQCollectDeployment;
   appUserId: string;
   /** Per-business branding for the intro + collaboration + consent screens. */
   business?: BusinessBranding;

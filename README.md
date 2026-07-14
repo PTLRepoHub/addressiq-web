@@ -100,9 +100,8 @@ const session = await fetch('/api/session', {
 const collector = new AddressIQ.IQCollect(mountEl, {
   apiKey: session.sessionToken, // server-minted, short-lived
   appUserId: session.appUserId,
-  // The SDK resolves the API URL from `environment` — never pass a URL.
+  // The SDK resolves the API URL from `deployment` — never pass a URL.
   // Defaults to 'production'; use 'staging' or 'development' as needed.
-  // ('sandbox' is a deprecated alias for 'staging'.)
   onAddressSelected: (a) => console.log(a.locationCode),
 });
 collector.open();
@@ -116,7 +115,7 @@ As always, the web SDK is collect-only — it returns a `locationCode`, and
 verification runs on the mobile SDK via `startVerification({ locationCode })`.
 
 The SDK talks to the AddressIQ platform automatically — integrators pass no API
-URL and no Google Maps key; select the target environment via `environment` (see
+URL and no Google Maps key; select the target deployment via `deployment` (see
 above). The hosts and a default Maps key are **baked into the bundle at build
 time** (`src/buildConfig.ts`), and the backend's `GET /api/v1/widget/config` can
 deliver a Maps key that **overrides** the baked one, so keys rotate without a
@@ -125,6 +124,31 @@ rebuild (`src/flow.ts:111`).
 > **The baked Maps key is public.** It is in the CDN bundle and the npm bundle by
 > design and is readable by anyone. Secrecy is not the control — the key is
 > restricted in the Google Cloud Console (HTTP referrer + API restrictions).
+
+## Deployment vs sandbox — two different things
+
+These are orthogonal, and conflating them is the most common integration mistake:
+
+| | What it selects | How you set it |
+|---|---|---|
+| **Deployment** | Which AddressIQ **hosts** you talk to | `config.deployment` |
+| **Tenant mode** | Whether your data is **sandbox or production** | **Which API key you paste** |
+
+`deployment` is one of `production` (default), `staging`, or `development`.
+Anything else throws — including **`'sandbox'`, which is rejected**, because it
+is not a deployment. Sandbox-vs-production is a property of your **API key**:
+`aiq_test_…` resolves to a sandbox tenant server-side, `aiq_live_…` to a
+production one. The SDK never sends a mode and cannot override the key's.
+
+The two combine freely: an `aiq_test_…` key on the `production` deployment is
+still sandbox data; an `aiq_live_…` key on `staging` is still production-mode data.
+
+> **Migrating from `environment:`?** `environment: 'sandbox'` → drop the field and
+> use a sandbox key (`aiq_test_…`), which is almost certainly what you meant. Use
+> `deployment: 'staging'` only if you specifically wanted the pre-production *hosts*.
+>
+> Because this bundle is loaded from a `<script>` tag by plain JS, an unrecognised
+> value **throws** rather than silently resolving to `undefined` hosts.
 
 ## Release
 
