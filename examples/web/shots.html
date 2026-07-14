@@ -16,7 +16,7 @@
 
   var c = new window.AddressIQ.IQCollect(document.getElementById('mount'), {
     apiKey: params.get('key') || 'aiq_test_demo_bank_seed01',
-    environment: 'development',
+    deployment: 'development',
     appUserId: params.get('appUserId') || 'cust_e2e_001',
     // No business config — fetched from the backend (real org) at startup.
     // Fake native location so the collect "use current location" works headless.

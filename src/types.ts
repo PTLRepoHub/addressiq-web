@@ -29,29 +29,54 @@ export interface SavedAddress {
 }
 
 /**
- * Canonical environment names. `staging` is the pre-production environment —
- * named `staging` across all AddressIQ SDKs and matching the `STAGING_*` build
- * variables. `development` points at a backend on the developer's own machine.
- */
-export type IQCollectEnvironment = 'staging' | 'production' | 'development';
-
-/**
- * What an integrator may pass. `sandbox` is the former name for `staging`,
- * retained so existing integrators keep working; it resolves identically.
+ * Which AddressIQ DEPLOYMENT to talk to — i.e. which hosts. `staging` is the
+ * pre-production deployment, named `staging` across all AddressIQ SDKs and
+ * matching the `STAGING_*` build variables. `development` points at a backend on
+ * the developer's own machine.
  *
- * @deprecated `'sandbox'` — use `'staging'`.
+ * This is NOT the tenant's mode. Sandbox-vs-production is a property of the API
+ * KEY (`aiq_test_…` resolves to a sandbox tenant server-side, `aiq_live_…` to a
+ * production one) and is decided entirely by the backend — the SDK neither sends
+ * it nor can influence it. The axes are orthogonal: a test key against the
+ * production deployment is still sandbox.
+ *
+ * `'sandbox'` was previously accepted here as an alias for `'staging'`, which
+ * asserted that sandbox was a deployment. It is not, and it is now rejected.
  */
-export type IQCollectEnvironmentInput = IQCollectEnvironment | 'sandbox';
+export type IQCollectDeployment = 'staging' | 'production' | 'development';
 
 export interface IQCollectConfig {
+  /**
+   * Tenant API key. This — not `deployment` — decides whether the tenant is in
+   * sandbox or production mode: `aiq_test_…` resolves to a sandbox App row
+   * server-side, `aiq_live_…` to a production one.
+   */
   apiKey: string;
   /**
-   * Which environment to target. The SDK resolves the URLs internally —
-   * integrators never pass a URL. `development` points at a local backend
-   * (http://localhost:4000); `production`/`staging` auto-resolve to the hosted
-   * APIs. `sandbox` is a deprecated alias for `staging`.
+   * Which DEPLOYMENT (i.e. which hosts) to target. The SDK resolves the URLs
+   * internally — integrators never pass a URL. `development` points at a local
+   * backend (http://localhost:4000); `production`/`staging` auto-resolve to the
+   * hosted APIs. An unrecognised value throws; `'sandbox'` is not a deployment.
    */
-  environment?: IQCollectEnvironmentInput;
+  deployment?: IQCollectDeployment;
+  /**
+   * Google Maps JS key. **Development only** — supplying it with any other
+   * `deployment` throws.
+   *
+   * The key is normally *platform-provisioned*: the widget fetches one from
+   * `GET /api/v1/widget/config` and falls back to the key baked into this bundle.
+   * Integrators never pass a Maps key, and this is not a partner-facing knob — it
+   * exists for the one case that breaks: a local backend with no key configured.
+   *
+   * When set it takes precedence over both the remote value and the baked one:
+   * it is useful precisely when the backend cannot supply a key.
+   *
+   * This is the ONLY SDK with a Maps-key override, and deliberately so — the key
+   * is consumed here, by this bundle, which builds the `maps.googleapis.com`
+   * script tag (`collect-form.ts`). The native SDKs merely host this widget in a
+   * WebView and never touch a key.
+   */
+  googleMapsApiKey?: string;
   appUserId: string;
   /** Per-business branding for the intro + collaboration + consent screens. */
   business?: BusinessBranding;
