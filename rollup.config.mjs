@@ -83,7 +83,6 @@ const buildReplace = () =>
       // check-baked-config.mjs would not catch it.
       __ADDRESSIQ_DEV_API_URL__: bake('ADDRESSIQ_DEV_API_URL', 'http://localhost:4000'),
       __ADDRESSIQ_DEV_INGEST_URL__: bake('ADDRESSIQ_DEV_INGEST_URL', 'http://localhost:4000'),
-      __ADDRESSIQ_DEV_CDN_URL__: bake('ADDRESSIQ_DEV_CDN_URL', 'http://localhost:4000'),
     },
   });
 

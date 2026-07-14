@@ -108,7 +108,7 @@ const DEPLOYMENT_URLS: Record<IQCollectDeployment, DeploymentUrls> = {
     // backend. Development-only — nothing else reads these.
     api: BUILD_CONFIG.devApiUrl,
     ingest: BUILD_CONFIG.devIngestUrl,
-    cdn: BUILD_CONFIG.devCdnUrl,
+    cdn: 'http://localhost:4000',
   },
 };
 

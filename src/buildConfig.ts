@@ -43,7 +43,6 @@ declare const __GOOGLE_MAPS_SDK_KEY__: string | undefined;
 // would let a developer's LAN IP get baked in as production.
 declare const __ADDRESSIQ_DEV_API_URL__: string | undefined;
 declare const __ADDRESSIQ_DEV_INGEST_URL__: string | undefined;
-declare const __ADDRESSIQ_DEV_CDN_URL__: string | undefined;
 
 export const BUILD_CONFIG = {
   /** Staging hosts. Rollup injects the GH `STAGING_*_BASE_URL` variables. */
@@ -92,9 +91,5 @@ export const BUILD_CONFIG = {
   devIngestUrl:
     typeof __ADDRESSIQ_DEV_INGEST_URL__ !== 'undefined' && __ADDRESSIQ_DEV_INGEST_URL__
       ? __ADDRESSIQ_DEV_INGEST_URL__
-      : 'http://localhost:4000',
-  devCdnUrl:
-    typeof __ADDRESSIQ_DEV_CDN_URL__ !== 'undefined' && __ADDRESSIQ_DEV_CDN_URL__
-      ? __ADDRESSIQ_DEV_CDN_URL__
       : 'http://localhost:4000',
 } as const;
