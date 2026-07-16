@@ -15,7 +15,10 @@
 //   node scripts/check-baked-config.mjs           # require the Maps key
 //   node scripts/check-baked-config.mjs --allow-empty-maps-key   # local builds
 //
-// CI runs it WITHOUT the flag in every workflow that publishes (npm, CDN, fanout).
+// CI runs it WITHOUT the flag in the workflows that publish a bundle (npm, CDN).
+// The widget-fanout no longer builds a bundle — it only writes the SRI pin into
+// the SDKs, which load the widget from the CDN — so `--allow-empty-maps-key` is
+// now only a local-build convenience.
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

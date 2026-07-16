@@ -100,9 +100,8 @@ const session = await fetch('/api/session', {
 const collector = new AddressIQ.IQCollect(mountEl, {
   apiKey: session.sessionToken, // server-minted, short-lived
   appUserId: session.appUserId,
-  // The SDK resolves the API URL from `environment` — never pass a URL.
+  // The SDK resolves the API URL from `deployment` — never pass a URL.
   // Defaults to 'production'; use 'staging' or 'development' as needed.
-  // ('sandbox' is a deprecated alias for 'staging'.)
   onAddressSelected: (a) => console.log(a.locationCode),
 });
 collector.open();
@@ -116,7 +115,7 @@ As always, the web SDK is collect-only — it returns a `locationCode`, and
 verification runs on the mobile SDK via `startVerification({ locationCode })`.
 
 The SDK talks to the AddressIQ platform automatically — integrators pass no API
-URL and no Google Maps key; select the target environment via `environment` (see
+URL and no Google Maps key; select the target deployment via `deployment` (see
 above). The hosts and a default Maps key are **baked into the bundle at build
 time** (`src/buildConfig.ts`), and the backend's `GET /api/v1/widget/config` can
 deliver a Maps key that **overrides** the baked one, so keys rotate without a
@@ -125,6 +124,31 @@ rebuild (`src/flow.ts:111`).
 > **The baked Maps key is public.** It is in the CDN bundle and the npm bundle by
 > design and is readable by anyone. Secrecy is not the control — the key is
 > restricted in the Google Cloud Console (HTTP referrer + API restrictions).
+
+## Deployment vs sandbox — two different things
+
+These are orthogonal, and conflating them is the most common integration mistake:
+
+| | What it selects | How you set it |
+|---|---|---|
+| **Deployment** | Which AddressIQ **hosts** you talk to | `config.deployment` |
+| **Tenant mode** | Whether your data is **sandbox or production** | **Which API key you paste** |
+
+`deployment` is one of `production` (default), `staging`, or `development`.
+Anything else throws — including **`'sandbox'`, which is rejected**, because it
+is not a deployment. Sandbox-vs-production is a property of your **API key**:
+`aiq_test_…` resolves to a sandbox tenant server-side, `aiq_live_…` to a
+production one. The SDK never sends a mode and cannot override the key's.
+
+The two combine freely: an `aiq_test_…` key on the `production` deployment is
+still sandbox data; an `aiq_live_…` key on `staging` is still production-mode data.
+
+> **Migrating from `environment:`?** `environment: 'sandbox'` → drop the field and
+> use a sandbox key (`aiq_test_…`), which is almost certainly what you meant. Use
+> `deployment: 'staging'` only if you specifically wanted the pre-production *hosts*.
+>
+> Because this bundle is loaded from a `<script>` tag by plain JS, an unrecognised
+> value **throws** rather than silently resolving to `undefined` hosts.
 
 ## Release
 
@@ -137,3 +161,89 @@ native SDKs. See **[`docs/RELEASE.md`](docs/RELEASE.md)**.
 
 Fork, branch, and open a PR. CI builds the SDK, runs the smoke test, and
 type-checks the example on every push/PR.
+
+## Running the SDK locally, end to end
+
+Everything below is **development-only**. Every override is honoured solely under
+the `development` deployment and **throws** on a staging or production build, even
+if the variable is set — a build-time value must never be able to point a shipped
+app at an arbitrary host.
+
+### 1. Start the backend
+
+```sh
+cd addressiq-node-backend
+cp .env.example .env          # set GOOGLE_MAPS_API_KEY if you want the map to load
+npm install && npm start      # http://localhost:4000
+```
+
+It must bind `0.0.0.0`, not `127.0.0.1`, or nothing off-machine can reach it.
+
+### 2. (Optional) Serve the widget yourself
+
+Only needed if you are **changing the widget**. Otherwise the SDK uses the widget
+it already ships.
+
+```sh
+cd addressiq-web
+npx rollup -c                 # → dist/iqcollect.js
+npx serve dist -p 5173
+```
+
+Then set `ADDRESSIQ_DEV_WIDGET_URL` to `http://<host>:5173/iqcollect.js` for live
+reload without re-vendoring. Point it at a **published** URL
+(`https://cdn.addressiqpro.com/v0.5.3/iqcollect.js`) instead to exercise the
+remote-load + SRI + `onerror`-fallback paths, which `development` otherwise never
+takes because it inlines the bundled asset.
+
+A `file://` path will **not** work: the Android emulator is a separate VM and
+cannot see your filesystem, and a physical device certainly cannot. It has to be
+served over HTTP.
+
+### 3. Point the SDK at your machine
+
+```sh
+cp .env.example .env
+```
+
+**Which host do I use?**
+
+| Running on | Host |
+|---|---|
+| Android emulator | `10.0.2.2` — a special alias for your machine's localhost |
+| iOS simulator | `localhost` — it shares your Mac's network |
+| **Physical device (either OS)** | your **LAN IP** — `ipconfig getifaddr en0` |
+
+The default is the emulator/simulator literal, which is exactly why these
+overrides exist: **a physical device cannot reach `10.0.2.2` or `localhost`.**
+
+Then build — rollup reads `.env` automatically:
+
+```sh
+npm run build && npm run example
+```
+
+### 4. Android only: allow plain HTTP
+
+A LAN IP over plain `http://` is blocked by default. In your **debug** manifest:
+
+```xml
+<application android:usesCleartextTraffic="true" …>
+```
+
+Debug only — never in a release. (A `network_security_config` scoped to that one
+host is the tighter version.)
+
+### Troubleshooting
+
+- **Requests hang / connection refused on a real device** — the backend is bound to
+  `127.0.0.1`. Bind `0.0.0.0`.
+- **Works on the emulator, fails on a device** — you are still on `10.0.2.2`. Set a
+  LAN IP.
+- **Android: `net::ERR_CLEARTEXT_NOT_PERMITTED`** — step 4.
+- **The map is blank** — your backend has no Maps key. `GET /api/v1/widget/config`
+  supplies it; set `GOOGLE_MAPS_API_KEY` in the backend's `.env`. (The key is
+  platform-provisioned; no native SDK accepts one, because the key is used by the
+  widget, not by native code.)
+- **An override "does nothing"** — check `deployment` is `development`. Anywhere
+  else it throws rather than being silently ignored, so you would have seen an error.

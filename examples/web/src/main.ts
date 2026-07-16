@@ -16,7 +16,7 @@ if (!mount) throw new Error('mount element missing');
 
 const collector = new IQCollect(mount, {
   apiKey: 'aiq_test_demo_bank_seed01',
-  environment: 'production',
+  deployment: 'production',
   appUserId: 'cust_sample_001',
   prefill: { firstName: 'Sample', lastName: 'User' },
   theme: 'dark',

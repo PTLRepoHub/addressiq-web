@@ -27,6 +27,12 @@ export interface FlowConfig {
   /** Host OS (native shells only) — selects the platform-specific Settings screen. */
   platform?: 'ios' | 'android';
   locationProvider: LocationProvider;
+  /**
+   * Development-only Maps key override. Wins over the backend's key and the
+   * baked one — it exists for a local backend that has no key configured.
+   * IQCollect refuses it on any deployment other than `development`.
+   */
+  googleMapsApiKey?: string;
   /** Fetch widget bootstrap config from the backend (business + Maps key). */
   loadConfig: () => Promise<{ business: BusinessBranding | null; googleMapsApiKey?: string }>;
   listAddresses: () => Promise<SavedAddress[]>;
@@ -106,9 +112,14 @@ export class FlowController {
       .loadConfig()
       .catch((): { business: BusinessBranding | null; googleMapsApiKey?: string } => ({ business: null }));
     this.business = mergeBusiness(this.config.business, remote.business);
-    // Hybrid, config-wins for rotation: the backend key (from /widget/config)
-    // takes priority over the key baked into the bundle at build time.
-    this.googleMapsApiKey = remote.googleMapsApiKey || BUILD_CONFIG.mapsKey;
+    // Maps key precedence:
+    //   1. googleMapsApiKey on the config — DEVELOPMENT ONLY (IQCollect throws if
+    //      it is set on a shipped build). It wins because it exists exactly for
+    //      the case the others cannot serve: a local backend with no key.
+    //   2. the backend key from /widget/config — lets keys rotate without a rebuild.
+    //   3. the key baked into this bundle at build time.
+    this.googleMapsApiKey =
+      this.config.googleMapsApiKey || remote.googleMapsApiKey || BUILD_CONFIG.mapsKey;
     this.stage = 'intro';
     this.render();
   }

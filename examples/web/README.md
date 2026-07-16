@@ -4,12 +4,13 @@ These are ready-to-run demos of the AddressIQ web widget (the pop-up that lets a
 user add and verify their address).
 
 The easiest one to start with is **`local.html`**. It passes
-`environment: 'development'`, so the SDK targets your **local AddressIQ backend on
+`deployment: 'development'`, so the SDK targets your **local AddressIQ backend on
 `http://localhost:4000`** with a seeded test key, and you see the real flow.
-Integrators never pass a URL — the SDK resolves it from `environment`
-(`production`, `staging`, or `development`; `sandbox` is a deprecated alias for
-`staging`). If you don't have a backend running,
-you can switch to **fake data** for a fully offline demo — see
+Integrators never pass a URL — the SDK resolves it from `deployment`
+(`production`, `staging`, or `development`). Note `sandbox` is **not** a
+deployment: sandbox-vs-production is decided by the API key you paste
+(`aiq_test_…` vs `aiq_live_…`), not by this field. If you don't have a backend
+running, you can switch to **fake data** for a fully offline demo — see
 "[Optional: the sample server](#optional-the-sample-server)" below.
 
 ## The files here
@@ -27,7 +28,7 @@ you can switch to **fake data** for a fully offline demo — see
 
 You need **Node.js 18 or newer**. That's the only thing to install.
 
-`local.html` passes `environment: 'development'`, so the SDK targets your local
+`local.html` passes `deployment: 'development'`, so the SDK targets your local
 AddressIQ backend on `http://localhost:4000` using a seeded test key. In dev the
 backend allows all origins (CORS), so the browser can call it directly — no
 `.env`. Just make sure a backend is listening on `:4000` (see
@@ -113,9 +114,9 @@ a real phone app, the app supplies the location, and the permission pop-up stays
 native.)
 
 ### Which backend it talks to
-The SDK resolves the API URL from `environment` — integrators never pass a URL.
-`local.html` uses `environment: 'development'` (→ `http://localhost:4000`); the
-hosted paths are `environment: 'production'` and `environment: 'staging'`. To run
+The SDK resolves the API URL from `deployment` — integrators never pass a URL.
+`local.html` uses `deployment: 'development'` (→ `http://localhost:4000`); the
+hosted paths are `deployment: 'production'` and `deployment: 'staging'`. To run
 against a different local backend, listen on `:4000` (or start the sample server
 there — see below).
 
@@ -126,10 +127,10 @@ there — see below).
 A real integration never ships an API key in the browser — the browser calls
 *your* server, which adds the key. `addressiq-node-backend` is the AddressIQ
 **Node server SDK** with a sample `server.js` that plays that role and listens on
-`:4000`, exactly where `environment: 'development'` points. It also lets you run
+`:4000`, exactly where `deployment: 'development'` points. It also lets you run
 **offline with fake data**.
 
-Run it on `:4000` and the widget (using `environment: 'development'`) hits it with
+Run it on `:4000` and the widget (using `deployment: 'development'`) hits it with
 no further config. The sample server can run two ways:
 
 | Mode | How to start it | What the widget talks to | Needs the AddressIQ API? |
@@ -156,7 +157,7 @@ demoing the two address-book branches via `mock-fixtures.json`.
 
 | Port | What runs there | Command |
 |------|-----------------|---------|
-| `4000` | Local backend the widget hits via `environment: 'development'` — the sample server (real or fake) | `node server.js` (add `MOCK_UPSTREAM=1` for fake) |
+| `4000` | Local backend the widget hits via `deployment: 'development'` — the sample server (real or fake) | `node server.js` (add `MOCK_UPSTREAM=1` for fake) |
 | `4000` | The AddressIQ API (`geo-tagging`) — what the sample server forwards to in forward mode | (its own dev setup) |
 | `8077` | The widget page + built file | `npm run example:harness` |
 | `8080` | Only for `index.html` | `npm run serve` |
