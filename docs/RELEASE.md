@@ -21,54 +21,36 @@ and `widget-fanout.yml` (the four native SDKs, §1).
 - **npm package:** `@addressiq/iqcollect-web` (`package.json:2`), published with
   public access (`package.json:18-20`, and `--access public` in
   `release.yml:65,67`). Only `dist/` is packed (`package.json:15-17`).
-- **`widget-fanout.yml`** keeps the four native SDKs in sync with the widget. On a
-  **web release** (`release: published`, `widget-fanout.yml:19-21`) it builds the
-  bundle, then opens a re-vendor PR in each consumer:
-
-  | Consumer repo | Destination | Vendored artifact (`widget-fanout.yml:147-165`) |
-  |---|---|---|
-  | `addressiq-ios` | `Sources/AddressIQ/Resources/iqcollect.js` | `iqcollect` (keyed) |
-  | `addressiq-flutter` | `assets/iqcollect.js` | **`iqcollect-nokey`** (see below) |
-  | `addressiq-android` | `src/main/assets/iqcollect.js` | `iqcollect` (keyed) |
-  | `addressiq-react-native` | `src/ui/widgetBundle.ts` (regenerated TS string literal) | `iqcollect` (keyed) |
-
-  Each PR lands as `feat(widget): re-vendor iqcollect.js from web vX.Y.Z`
-  (`widget-fanout.yml:239-240`), so **release-please in the consumer cuts a
-  minor** on merge. React Native is special-cased because its bundle is a TS
-  string literal rather than an asset (`widget-fanout.yml:196-211`). A
-  `workflow_dispatch` run defaults to `dry_run: true` — build and diff, open no
-  PRs (`widget-fanout.yml:23-27,233`).
-
-- **The vendored bundle is only the fallback — the SDKs load the widget from the
-  CDN.** Each fanout leg writes **two pin files** into the consumer repo
-  (`widget-fanout.yml:212-219`):
+- **`widget-fanout.yml`** keeps the four native SDKs' widget pin in sync. **The
+  SDKs no longer vendor the bundle — they load the SRI-pinned copy from the CDN at
+  runtime.** On a **web release** (`release: published`) the job computes the
+  version + SRI hash, then opens a pin-bump PR in each of `addressiq-ios`,
+  `addressiq-flutter`, `addressiq-android`, `addressiq-react-native` writing **two
+  files** into each:
 
   | File | Contents |
   |---|---|
   | `.widget-version` | `vX.Y.Z` |
   | `.widget-integrity` | the `sha384-…` SRI hash of `iqcollect.js` |
 
-  The SDK bakes both into its build config and loads
-  `https://{cdn}/v{X.Y.Z}/iqcollect.js` with
-  `<script integrity="sha384-…" crossorigin="anonymous">`, falling back to its
-  vendored copy via `onerror`. The hash is generated from **the same build
-  `cdn.yml` uploads on the same release event** (`widget-fanout.yml:41-48,72-92`),
-  which is what makes the pinned hash match the bytes the CDN actually serves.
-  The CDN is therefore **not a web-partner-only concern**: the immutable
-  `/v{x.y.z}/` layout and the `MANIFEST.json` SRI hashes are load-bearing for our
-  own mobile apps.
+  Each PR lands as `chore(widget): bump CDN widget pin to web vX.Y.Z`, so
+  release-please in the consumer cuts a release on merge. A `workflow_dispatch` run
+  defaults to `dry_run: true` — compute and diff, open no PRs.
 
-- **Two builds, because of pub.dev.** The job builds a second, **key-free** bundle
-  (uploaded as artifact `iqcollect-nokey`, `widget-fanout.yml:113-138`) and vendors
-  *that* into `addressiq-flutter` only: pub.dev scans packages for credentials and
-  **refuses to publish one containing a Google API key**. This costs nothing —
-  the vendored bundle is only the offline fallback and is never SRI-checked, so
-  Flutter still fetches and verifies the **keyed CDN bundle** exactly like the
-  other three; and in the fallback path the Maps key comes from the backend's
-  `/widget/config`, which already takes priority over the baked key
-  (`src/flow.ts:111`). The key-free build asserts the strip actually worked
-  (`node scripts/check-baked-config.mjs --allow-empty-maps-key`, plus a literal
-  `AIzaSy…` grep, `widget-fanout.yml:125-130`).
+  The SDK bakes both files into its build config and loads
+  `https://{cdn}/v{X.Y.Z}/iqcollect.js` with
+  `<script integrity="sha384-…" crossorigin="anonymous">`. **There is no fallback**
+  — a failed load surfaces `WIDGET_LOAD_FAILED`. The hash is generated from **the
+  same build `cdn.yml` uploads on the same release event**, which is what makes the
+  pinned hash match the bytes the CDN actually serves. The CDN is therefore load-
+  bearing for our own mobile apps, not a web-partner-only concern.
+
+  > **History:** the fanout used to copy the bundle *into* each SDK as an offline
+  > fallback, which required a second, key-free build for `addressiq-flutter` alone
+  > (pub.dev rejects a package containing a Google API key). Both are gone: no
+  > bundle is vendored, so there is nothing to strip and nothing to copy — the job
+  > writes only the pin. `--allow-empty-maps-key` on `check-baked-config.mjs` is now
+  > only a local-build convenience.
 
   > **The Maps key is public by design.** It is baked into the CDN bundle and the
   > npm bundle and is readable by anyone who reads the JS. Secrecy is not the
@@ -187,8 +169,9 @@ purge step to get wrong.
 - **staging** — overwrite is **allowed**, so the branch can be iterated on without
   a version bump. ⚠ The job emits a warning when it overwrites (`cdn.yml:216`): any
   SDK staging build that already pinned an SRI hash for that version will now
-  **fail the integrity check and silently fall back to its bundled widget**. Bump
-  the version if you need staging to genuinely exercise the CDN path.
+  **fail the integrity check — and, since the SDKs ship no bundled fallback, the
+  collect UI will not render at all** (it reports `WIDGET_LOAD_FAILED`). Bump the
+  version so the pin matches the freshly overwritten bytes.
 
 Three guards that apply to both:
 

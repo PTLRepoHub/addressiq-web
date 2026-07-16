@@ -4,8 +4,9 @@ name: widget-fanout
 # sync — a web release could change the widget and propagate to zero SDKs,
 # silently. This mirrors AddressIq-proto/fanout.yml for the widget bundle.
 #
-# On a web release: build the bundle once, then open a re-vendor PR in each
-# consumer. The PR lands as `feat(widget):` so release-please cuts a minor.
+# On a web release: compute the version + SRI hash, then open a pin-bump PR in
+# each SDK writing .widget-version / .widget-integrity. The SDKs load the widget
+# from the CDN and vendor no copy, so there is nothing to re-vendor — only the pin.
 #
 # Cross-repo writes need a GitHub App token; the default GITHUB_TOKEN is scoped
 # to this repo only. Same App as release-please (see release-please.yml).
@@ -91,51 +92,13 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "integrity=$INTEGRITY" >> "$GITHUB_OUTPUT"
           echo "v$V  $INTEGRITY"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: iqcollect
-          path: dist/iqcollect.js
-          if-no-files-found: error
 
-      # A SECOND, key-free build — for pub.dev only.
-      #
-      # pub.dev scans packages for credentials and REFUSES to publish one that
-      # contains a Google API key ("Potential leak of Google API Key in
-      # assets/iqcollect.js"). It is right to: the Flutter package is public.
-      #
-      # This costs nothing, because the vendored bundle is only the *fallback*.
-      # The SRI pin (`.widget-integrity`) hashes the bytes on the CDN, NOT this
-      # file — so Flutter still fetches and integrity-checks the keyed CDN bundle
-      # exactly like the other SDKs. The keyless copy is used only when the CDN is
-      # unreachable, and in that path the Maps key comes from the backend's
-      # /widget/config anyway, which takes priority over the baked one
-      # (addressiq-web/src/flow.ts:111).
-      - name: Build a key-free bundle for pub.dev (Flutter)
-        env:
-          STAGING_ADDRESSIQ_API_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_API_BASE_URL }}
-          STAGING_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_INGEST_BASE_URL }}
-          STAGING_ADDRESSIQ_CDN_BASE_URL: ${{ vars.STAGING_ADDRESSIQ_CDN_BASE_URL }}
-          PROD_ADDRESSIQ_API_BASE_URL: ${{ vars.PROD_ADDRESSIQ_API_BASE_URL }}
-          PROD_ADDRESSIQ_INGEST_BASE_URL: ${{ vars.PROD_ADDRESSIQ_INGEST_BASE_URL }}
-          PROD_ADDRESSIQ_CDN_BASE_URL: ${{ vars.PROD_ADDRESSIQ_CDN_BASE_URL }}
-          # deliberately NOT passing GOOGLE_MAPS_SDK_KEY
-        run: |
-          set -euo pipefail
-          npm run build
-          # The guard must now REFUSE to find a key — assert the strip worked.
-          node scripts/check-baked-config.mjs --allow-empty-maps-key
-          if grep -qoE 'AIzaSy[A-Za-z0-9_-]{10}' dist/iqcollect.js; then
-            echo "::error::the key-free bundle still contains a Google API key — pub.dev will reject it" >&2
-            exit 1
-          fi
-          mkdir -p /tmp/nokey && cp dist/iqcollect.js /tmp/nokey/iqcollect.js
-          echo "key-free bundle OK ($(wc -c < /tmp/nokey/iqcollect.js) bytes)"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: iqcollect-nokey
-          path: /tmp/nokey/iqcollect.js
-          if-no-files-found: error
+      # NOTE: the bundle is NOT vendored into the SDKs any more — they load the
+      # SRI-pinned copy from the CDN at runtime (cdn.yml uploads it). So this job
+      # no longer uploads the bundle as an artifact, and the second, key-free build
+      # that pub.dev required (it rejects a Google API key in a vendored asset) is
+      # gone entirely. All this job produces now is the version + integrity above,
+      # which the fanout writes into each SDK as the pin.
 
   fanout:
     name: ${{ matrix.repo }}
@@ -144,25 +107,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - repo: addressiq-ios
-            dest: Sources/AddressIQ/Resources/iqcollect.js
-            artifact: iqcollect
-          # pub.dev refuses to publish a package containing a Google API key, so
-          # Flutter vendors the KEY-FREE build. Harmless: the vendored bundle is
-          # only the offline fallback — the SRI pin hashes the CDN bytes, so
-          # Flutter still fetches and verifies the keyed CDN bundle like everyone
-          # else, and in the fallback path the key comes from /widget/config.
-          - repo: addressiq-flutter
-            dest: assets/iqcollect.js
-            artifact: iqcollect-nokey
-          - repo: addressiq-android
-            dest: src/main/assets/iqcollect.js
-            artifact: iqcollect
-          # RN embeds the bundle as a TS string literal rather than an asset.
-          - repo: addressiq-react-native
-            dest: src/ui/widgetBundle.ts
-            artifact: iqcollect
+        # The SDKs no longer vendor the bundle — they load the SRI-pinned copy from
+        # the CDN. So a leg only writes the PIN (.widget-version / .widget-integrity)
+        # into each repo; there is no per-repo `dest` asset and no artifact.
+        repo:
+          - addressiq-ios
+          - addressiq-flutter
+          - addressiq-android
+          - addressiq-react-native
 
     steps:
       - name: Mint GitHub App token
@@ -180,42 +132,18 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           ref: main
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: /tmp/widget
-
-      - name: Re-vendor
+      - name: Write widget pin
         env:
-          DEST: ${{ matrix.dest }}
           VERSION: ${{ needs.build.outputs.version }}
           INTEGRITY: ${{ needs.build.outputs.integrity }}
         run: |
           set -euo pipefail
-          test -f "$DEST" || { echo "::error::$DEST missing in ${{ matrix.repo }}" >&2; exit 1; }
-          case "$DEST" in
-            *.ts)
-              # Regenerate the TS module; the string must be an exact JSON
-              # encoding of the bundle, matching the existing header.
-              node -e '
-                const fs = require("fs");
-                const js = fs.readFileSync("/tmp/widget/iqcollect.js", "utf8");
-                const out =
-                  "/* AUTO-GENERATED from @addressiq/iqcollect-web dist/iqcollect.js — do not edit. */\n" +
-                  "/* eslint-disable */\n" +
-                  "export const WIDGET_JS: string = " + JSON.stringify(js) + ";\n";
-                fs.writeFileSync(process.env.DEST, out);
-              '
-              ;;
-            *) cp /tmp/widget/iqcollect.js "$DEST" ;;
-          esac
           printf 'v%s\n' "$VERSION" > .widget-version
           # The SDKs bake these two into their build config and use them to load
-          # https://{cdn}/v{VERSION}/iqcollect.js with <script integrity="…">.
-          # Both describe the SAME bytes just vendored above, so the CDN copy and
-          # the bundled fallback are byte-identical by construction — and an SRI
-          # mismatch at runtime means the CDN was tampered with, not that the two
-          # drifted apart.
+          # https://{cdn}/v{VERSION}/iqcollect.js with <script integrity="…">. This
+          # is the ONLY widget source — the SDKs ship no bundled copy — so the pin
+          # must describe exactly the bytes cdn.yml uploaded from the same build. A
+          # separate CI check in each SDK verifies the pin resolves a loadable URL.
           printf '%s\n' "$INTEGRITY" > .widget-integrity
 
       - name: Anything to do?
@@ -223,26 +151,27 @@ jobs:
         run: |
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "${{ matrix.repo }} already carries this widget build."
+            echo "${{ matrix.repo }} already pins this widget build."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             git --no-pager diff --stat
           fi
 
-      - name: Open re-vendor PR
+      - name: Open widget-pin PR
         if: steps.diff.outputs.changed == 'true' && inputs.dry_run != true
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
           branch: widget/v${{ needs.build.outputs.version }}
           base: main
-          commit-message: "feat(widget): re-vendor iqcollect.js from web v${{ needs.build.outputs.version }}"
-          title: "feat(widget): re-vendor iqcollect.js from web v${{ needs.build.outputs.version }}"
+          commit-message: "chore(widget): bump CDN widget pin to web v${{ needs.build.outputs.version }}"
+          title: "chore(widget): bump CDN widget pin to web v${{ needs.build.outputs.version }}"
           body: |
-            Re-vendors `${{ matrix.dest }}` from
+            Bumps `.widget-version` / `.widget-integrity` to
             [`@addressiq/iqcollect-web` v${{ needs.build.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.build.outputs.version }}).
 
-            `.widget-version` updated to `v${{ needs.build.outputs.version }}`.
+            The SDK loads the widget from the SRI-pinned CDN copy at runtime and ships
+            no bundled bundle, so this pin is the only thing to update.
 
             Generated by `widget-fanout.yml` in `${{ github.repository }}`.
           labels: widget-sync
